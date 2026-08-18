@@ -1,0 +1,1 @@
+Project setup completed on new laptop.
