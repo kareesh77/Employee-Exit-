@@ -99,3 +99,14 @@ class ExitInterviewResponse(ExitInterviewCreate):
 
     class Config:
         from_attributes = True
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class LoginResponse(BaseModel):
+    message: str
+    user_id: int
+    email: str
+    role: str
+    

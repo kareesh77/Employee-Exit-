@@ -137,3 +137,13 @@ FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
 WHERE TABLE_SCHEMA = 'employee_exit_management'
   AND REFERENCED_TABLE_NAME IS NOT NULL
 ORDER BY TABLE_NAME, CONSTRAINT_NAME;
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class LoginResponse(BaseModel):
+    message: str
+    user_id: int
+    email: str
+    role: str

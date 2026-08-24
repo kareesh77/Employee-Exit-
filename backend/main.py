@@ -1,4 +1,7 @@
-from fastapi import FastAPI, Depends
+from passlib.context import CryptContext
+
+from fastapi import FastAPI, Depends, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -14,38 +17,48 @@ from schemas import (
     ClearanceCreate,
     ClearanceResponse,
     ExitInterviewCreate,
-    ExitInterviewResponse
+    ExitInterviewResponse,
+    LoginRequest,
+    LoginResponse,
 )
 
 from models import (
+    User,
     Employee,
     ExitRequest,
     Approval,
     Clearance,
-    ExitInterview
+    ExitInterview,
 )
-
-
+pwd_context = CryptContext(
+    schemes=["bcrypt"],
+    deprecated="auto",
+)
 app = FastAPI(
     title="Employee Exit API",
     description="Backend API for Employee Exit Management System",
-    version="1.0.0"
+    version="1.0.0",
 )
-
-
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 @app.get("/")
 def root():
     return {
         "message": "Employee Exit API is running successfully"
     }
-
-
 @app.get("/health")
 def health_check():
     return {
         "status": "healthy"
     }
-
 
 @app.get("/db-test")
 def database_test(db: Session = Depends(get_db)):
@@ -55,8 +68,6 @@ def database_test(db: Session = Depends(get_db)):
         "database": "connected",
         "test": result
     }
-
-
 @app.post("/employees", response_model=EmployeeResponse)
 def create_employee(
     employee: EmployeeCreate,
@@ -70,7 +81,7 @@ def create_employee(
         phone=employee.phone,
         department_id=employee.department_id,
         designation=employee.designation,
-        joining_date=employee.joining_date
+        joining_date=employee.joining_date,
     )
 
     db.add(new_employee)
@@ -83,8 +94,6 @@ def create_employee(
 @app.get("/employees", response_model=list[EmployeeResponse])
 def get_employees(db: Session = Depends(get_db)):
     return db.query(Employee).all()
-
-
 @app.post("/exit-requests", response_model=ExitRequestResponse)
 def create_exit_request(
     exit_request: ExitRequestCreate,
@@ -93,7 +102,7 @@ def create_exit_request(
     new_exit_request = ExitRequest(
         employee_id=exit_request.employee_id,
         reason=exit_request.reason,
-        proposed_last_working_date=exit_request.proposed_last_working_date
+        proposed_last_working_date=exit_request.proposed_last_working_date,
     )
 
     db.add(new_exit_request)
@@ -101,8 +110,6 @@ def create_exit_request(
     db.refresh(new_exit_request)
 
     return new_exit_request
-
-
 @app.post("/approvals", response_model=ApprovalResponse)
 def create_approval(
     approval: ApprovalCreate,
@@ -112,7 +119,7 @@ def create_approval(
         exit_request_id=approval.exit_request_id,
         approved_by=approval.approved_by,
         status=approval.status,
-        comments=approval.comments
+        comments=approval.comments,
     )
 
     db.add(new_approval)
@@ -120,7 +127,6 @@ def create_approval(
     db.refresh(new_approval)
 
     return new_approval
-
 
 @app.post("/clearances", response_model=ClearanceResponse)
 def create_clearance(
@@ -130,7 +136,7 @@ def create_clearance(
     new_clearance = Clearance(
         exit_request_id=clearance.exit_request_id,
         status=clearance.status,
-        comments=clearance.comments
+        comments=clearance.comments,
     )
 
     db.add(new_clearance)
@@ -138,7 +144,6 @@ def create_clearance(
     db.refresh(new_clearance)
 
     return new_clearance
-
 
 @app.post("/exit-interviews", response_model=ExitInterviewResponse)
 def create_exit_interview(
@@ -149,7 +154,7 @@ def create_exit_interview(
         exit_request_id=interview.exit_request_id,
         feedback=interview.feedback,
         reason_for_leaving=interview.reason_for_leaving,
-        suggestions=interview.suggestions
+        suggestions=interview.suggestions,
     )
 
     db.add(new_interview)
@@ -157,3 +162,50 @@ def create_exit_interview(
     db.refresh(new_interview)
 
     return new_interview
+
+@app.post("/login", response_model=LoginResponse)
+def login(
+    login_data: LoginRequest,
+    db: Session = Depends(get_db)
+):
+    user = (
+        db.query(User)
+        .filter(User.email == login_data.email)
+        .first()
+    )
+
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid email or password",
+        )
+
+    try:
+        password_valid = pwd_context.verify(
+            login_data.password,
+            user.password_hash,
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to verify password. Check the stored password hash.",
+        )
+
+    if not password_valid:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid email or password",
+        )
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=403,
+            detail="User account is inactive",
+        )
+
+    return {
+        "message": "Login successful",
+        "user_id": user.id,
+        "email": user.email,
+        "role": user.role,
+    }
