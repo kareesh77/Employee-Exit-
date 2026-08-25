@@ -1,10 +1,18 @@
-﻿import Login from "./pages/Login";
+﻿import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import Login from "./pages/Login";
+import HRDashboard from "./pages/HRDashboard";
 
 function App() {
   return (
-    <div className="min-vh-100 bg-light d-flex align-items-center justify-content-center py-4">
-      <Login />
-    </div>
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Login />} />
+
+        <Route path="/hr/dashboard" element={<HRDashboard />} />
+
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
 
