@@ -30,15 +30,24 @@ from models import (
     Clearance,
     ExitInterview,
 )
+
+
+# Password hashing
 pwd_context = CryptContext(
     schemes=["bcrypt"],
     deprecated="auto",
 )
+
+
+# FastAPI application
 app = FastAPI(
     title="Employee Exit API",
     description="Backend API for Employee Exit Management System",
     version="1.0.0",
 )
+
+
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -49,16 +58,33 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ---------------------------------------------------------
+# ROOT
+# ---------------------------------------------------------
+
 @app.get("/")
 def root():
     return {
         "message": "Employee Exit API is running successfully"
     }
+
+
+# ---------------------------------------------------------
+# HEALTH
+# ---------------------------------------------------------
+
 @app.get("/health")
 def health_check():
     return {
         "status": "healthy"
     }
+
+
+# ---------------------------------------------------------
+# DATABASE TEST
+# ---------------------------------------------------------
 
 @app.get("/db-test")
 def database_test(db: Session = Depends(get_db)):
@@ -68,6 +94,12 @@ def database_test(db: Session = Depends(get_db)):
         "database": "connected",
         "test": result
     }
+
+
+# ---------------------------------------------------------
+# EMPLOYEES
+# ---------------------------------------------------------
+
 @app.post("/employees", response_model=EmployeeResponse)
 def create_employee(
     employee: EmployeeCreate,
@@ -94,6 +126,12 @@ def create_employee(
 @app.get("/employees", response_model=list[EmployeeResponse])
 def get_employees(db: Session = Depends(get_db)):
     return db.query(Employee).all()
+
+
+# ---------------------------------------------------------
+# EXIT REQUESTS
+# ---------------------------------------------------------
+
 @app.post("/exit-requests", response_model=ExitRequestResponse)
 def create_exit_request(
     exit_request: ExitRequestCreate,
@@ -110,6 +148,17 @@ def create_exit_request(
     db.refresh(new_exit_request)
 
     return new_exit_request
+
+
+@app.get("/exit-requests", response_model=list[ExitRequestResponse])
+def get_exit_requests(db: Session = Depends(get_db)):
+    return db.query(ExitRequest).all()
+
+
+# ---------------------------------------------------------
+# APPROVALS
+# ---------------------------------------------------------
+
 @app.post("/approvals", response_model=ApprovalResponse)
 def create_approval(
     approval: ApprovalCreate,
@@ -128,6 +177,16 @@ def create_approval(
 
     return new_approval
 
+
+@app.get("/approvals", response_model=list[ApprovalResponse])
+def get_approvals(db: Session = Depends(get_db)):
+    return db.query(Approval).all()
+
+
+# ---------------------------------------------------------
+# CLEARANCES
+# ---------------------------------------------------------
+
 @app.post("/clearances", response_model=ClearanceResponse)
 def create_clearance(
     clearance: ClearanceCreate,
@@ -144,6 +203,16 @@ def create_clearance(
     db.refresh(new_clearance)
 
     return new_clearance
+
+
+@app.get("/clearances", response_model=list[ClearanceResponse])
+def get_clearances(db: Session = Depends(get_db)):
+    return db.query(Clearance).all()
+
+
+# ---------------------------------------------------------
+# EXIT INTERVIEWS
+# ---------------------------------------------------------
 
 @app.post("/exit-interviews", response_model=ExitInterviewResponse)
 def create_exit_interview(
@@ -162,6 +231,11 @@ def create_exit_interview(
     db.refresh(new_interview)
 
     return new_interview
+
+
+# ---------------------------------------------------------
+# LOGIN
+# ---------------------------------------------------------
 
 @app.post("/login", response_model=LoginResponse)
 def login(
