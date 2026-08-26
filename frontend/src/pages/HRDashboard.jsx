@@ -6,16 +6,19 @@ function HRDashboard() {
   const [exitRequests, setExitRequests] = useState([]);
   const [approvals, setApprovals] = useState([]);
   const [clearances, setClearances] = useState([]);
+  const [exitInterviews, setExitInterviews] = useState([]);
 
   const [loadingEmployees, setLoadingEmployees] = useState(true);
   const [loadingExitRequests, setLoadingExitRequests] = useState(true);
   const [loadingApprovals, setLoadingApprovals] = useState(true);
   const [loadingClearances, setLoadingClearances] = useState(true);
+  const [loadingExitInterviews, setLoadingExitInterviews] = useState(true);
 
   const [employeeError, setEmployeeError] = useState("");
   const [exitRequestError, setExitRequestError] = useState("");
   const [approvalError, setApprovalError] = useState("");
   const [clearanceError, setClearanceError] = useState("");
+  const [exitInterviewError, setExitInterviewError] = useState("");
 
   const email = sessionStorage.getItem("userEmail");
 
@@ -87,6 +90,24 @@ function HRDashboard() {
     loadClearances();
   }, []);
 
+  // Load exit interviews
+  useEffect(() => {
+    const loadExitInterviews = async () => {
+      try {
+        const response = await api.get("/exit-interviews");
+        setExitInterviews(response.data);
+      } catch (error) {
+        console.error("Failed to load exit interviews:", error);
+        setExitInterviewError("Unable to load exit interviews.");
+      } finally {
+        setLoadingExitInterviews(false);
+      }
+    };
+
+    loadExitInterviews();
+  }, []);
+
+  // Logout
   const logout = () => {
     sessionStorage.clear();
     window.location.href = "/";
@@ -376,6 +397,67 @@ function HRDashboard() {
                           </span>
                         </td>
                         <td>{clearance.comments || "-"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+        </div>
+      </div>
+
+      {/* Exit Interviews */}
+      <div className="card shadow-sm mb-4">
+        <div className="card-header">
+          <h2 className="h5 mb-0">Exit Interviews</h2>
+        </div>
+
+        <div className="card-body">
+          {loadingExitInterviews && (
+            <p className="text-muted">
+              Loading exit interviews...
+            </p>
+          )}
+
+          {exitInterviewError && (
+            <div className="alert alert-danger">
+              {exitInterviewError}
+            </div>
+          )}
+
+          {!loadingExitInterviews &&
+            !exitInterviewError &&
+            exitInterviews.length === 0 && (
+              <p className="text-muted">
+                No exit interviews found.
+              </p>
+            )}
+
+          {!loadingExitInterviews &&
+            !exitInterviewError &&
+            exitInterviews.length > 0 && (
+              <div className="table-responsive">
+                <table className="table table-bordered table-hover">
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>Exit Request ID</th>
+                      <th>Feedback</th>
+                      <th>Reason for Leaving</th>
+                      <th>Suggestions</th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {exitInterviews.map((interview) => (
+                      <tr key={interview.id}>
+                        <td>{interview.id}</td>
+                        <td>{interview.exit_request_id}</td>
+                        <td>{interview.feedback || "-"}</td>
+                        <td>
+                          {interview.reason_for_leaving || "-"}
+                        </td>
+                        <td>{interview.suggestions || "-"}</td>
                       </tr>
                     ))}
                   </tbody>

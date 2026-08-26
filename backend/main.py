@@ -232,6 +232,10 @@ def create_exit_interview(
 
     return new_interview
 
+@app.get("/exit-interviews", response_model=list[ExitInterviewResponse])
+def get_exit_interviews(db: Session = Depends(get_db)):
+    return db.query(ExitInterview).all()
+
 
 # ---------------------------------------------------------
 # LOGIN
