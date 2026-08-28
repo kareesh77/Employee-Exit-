@@ -107,7 +107,69 @@ function HRDashboard() {
     loadExitInterviews();
   }, []);
 
-  // Logout
+  // Update exit request status
+  const updateRequestStatus = async (requestId, status) => {
+    try {
+      console.log("Updating request:", requestId, status);
+
+      setExitRequestError("");
+
+      const response = await api.put(
+        `/exit-requests/${requestId}/status`,
+        null,
+        {
+          params: {
+            status: status,
+          },
+        }
+      );
+
+      console.log("Update successful:", response.data);
+
+      // Update the request on the screen immediately
+      setExitRequests((previous) =>
+        previous.map((request) =>
+          request.id === requestId
+            ? {
+                ...request,
+                status: status,
+              }
+            : request
+        )
+      );
+
+      // Reload approvals so the Approvals section stays updated
+      try {
+        const approvalsResponse = await api.get("/approvals");
+        setApprovals(approvalsResponse.data);
+      } catch (approvalLoadError) {
+        console.error(
+          "Failed to reload approvals:",
+          approvalLoadError
+        );
+      }
+    } catch (error) {
+      console.error("Failed to update exit request:", error);
+      console.error("Response:", error.response?.data);
+
+      const detail = error.response?.data?.detail;
+
+      let errorMessage = "Unable to update exit request.";
+
+      if (typeof detail === "string") {
+        errorMessage = detail;
+      } else if (Array.isArray(detail)) {
+        errorMessage = detail
+          .map((item) => item?.msg || "Validation error")
+          .join(", ");
+      } else if (detail && typeof detail === "object") {
+        errorMessage = detail.msg || "Unable to update exit request.";
+      }
+
+      setExitRequestError(errorMessage);
+    }
+  };
+
   const logout = () => {
     sessionStorage.clear();
     window.location.href = "/";
@@ -146,6 +208,7 @@ function HRDashboard() {
         </div>
 
         <div className="card-body">
+
           {loadingEmployees && (
             <p className="text-muted">
               Loading employees...
@@ -171,6 +234,7 @@ function HRDashboard() {
             employees.length > 0 && (
               <div className="table-responsive">
                 <table className="table table-bordered table-hover">
+
                   <thead>
                     <tr>
                       <th>ID</th>
@@ -188,17 +252,31 @@ function HRDashboard() {
                       <tr key={employee.id}>
                         <td>{employee.id}</td>
                         <td>{employee.employee_code}</td>
+
                         <td>
                           {employee.first_name}{" "}
                           {employee.last_name}
                         </td>
-                        <td>{employee.phone || "-"}</td>
-                        <td>{employee.department_id}</td>
-                        <td>{employee.designation}</td>
-                        <td>{employee.joining_date}</td>
+
+                        <td>
+                          {employee.phone || "-"}
+                        </td>
+
+                        <td>
+                          {employee.department_id}
+                        </td>
+
+                        <td>
+                          {employee.designation}
+                        </td>
+
+                        <td>
+                          {employee.joining_date}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
+
                 </table>
               </div>
             )}
@@ -207,11 +285,15 @@ function HRDashboard() {
 
       {/* Exit Requests */}
       <div className="card shadow-sm mb-4">
+
         <div className="card-header">
-          <h2 className="h5 mb-0">Exit Requests</h2>
+          <h2 className="h5 mb-0">
+            Exit Requests
+          </h2>
         </div>
 
         <div className="card-body">
+
           {loadingExitRequests && (
             <p className="text-muted">
               Loading exit requests...
@@ -235,8 +317,11 @@ function HRDashboard() {
           {!loadingExitRequests &&
             !exitRequestError &&
             exitRequests.length > 0 && (
+
               <div className="table-responsive">
+
                 <table className="table table-bordered table-hover">
+
                   <thead>
                     <tr>
                       <th>ID</th>
@@ -244,39 +329,117 @@ function HRDashboard() {
                       <th>Reason</th>
                       <th>Last Working Date</th>
                       <th>Status</th>
+                      <th>Action</th>
                     </tr>
                   </thead>
 
                   <tbody>
+
                     {exitRequests.map((request) => (
+
                       <tr key={request.id}>
-                        <td>{request.id}</td>
-                        <td>{request.employee_id}</td>
-                        <td>{request.reason}</td>
+
+                        <td>
+                          {request.id}
+                        </td>
+
+                        <td>
+                          {request.employee_id}
+                        </td>
+
+                        <td>
+                          {request.reason}
+                        </td>
+
                         <td>
                           {request.proposed_last_working_date}
                         </td>
+
                         <td>
-                          <span className="badge bg-warning text-dark">
+
+                          <span
+                            className={`badge ${
+                              request.status === "approved"
+                                ? "bg-success"
+                                : request.status === "rejected"
+                                ? "bg-danger"
+                                : "bg-warning text-dark"
+                            }`}
+                          >
                             {request.status}
                           </span>
+
                         </td>
+
+                        <td>
+
+                          {request.status === "pending" ? (
+
+                            <div className="d-flex gap-2">
+
+                              <button
+                                type="button"
+                                className="btn btn-success btn-sm"
+                                onClick={() =>
+                                  updateRequestStatus(
+                                    request.id,
+                                    "approved"
+                                  )
+                                }
+                              >
+                                Approve
+                              </button>
+
+                              <button
+                                type="button"
+                                className="btn btn-danger btn-sm"
+                                onClick={() =>
+                                  updateRequestStatus(
+                                    request.id,
+                                    "rejected"
+                                  )
+                                }
+                              >
+                                Reject
+                              </button>
+
+                            </div>
+
+                          ) : (
+
+                            <span className="text-muted">
+                              Processed
+                            </span>
+
+                          )}
+
+                        </td>
+
                       </tr>
+
                     ))}
+
                   </tbody>
+
                 </table>
+
               </div>
+
             )}
         </div>
       </div>
 
       {/* Approvals */}
       <div className="card shadow-sm mb-4">
+
         <div className="card-header">
-          <h2 className="h5 mb-0">Approvals</h2>
+          <h2 className="h5 mb-0">
+            Approvals
+          </h2>
         </div>
 
         <div className="card-body">
+
           {loadingApprovals && (
             <p className="text-muted">
               Loading approvals...
@@ -300,8 +463,11 @@ function HRDashboard() {
           {!loadingApprovals &&
             !approvalError &&
             approvals.length > 0 && (
+
               <div className="table-responsive">
+
                 <table className="table table-bordered table-hover">
+
                   <thead>
                     <tr>
                       <th>ID</th>
@@ -313,39 +479,68 @@ function HRDashboard() {
                   </thead>
 
                   <tbody>
+
                     {approvals.map((approval) => (
+
                       <tr key={approval.id}>
-                        <td>{approval.id}</td>
-                        <td>{approval.exit_request_id}</td>
-                        <td>{approval.approved_by ?? "-"}</td>
+
                         <td>
+                          {approval.id}
+                        </td>
+
+                        <td>
+                          {approval.exit_request_id}
+                        </td>
+
+                        <td>
+                          {approval.approved_by ?? "-"}
+                        </td>
+
+                        <td>
+
                           <span
                             className={
                               approval.status === "approved"
                                 ? "badge bg-success"
+                                : approval.status === "rejected"
+                                ? "badge bg-danger"
                                 : "badge bg-warning text-dark"
                             }
                           >
                             {approval.status}
                           </span>
+
                         </td>
-                        <td>{approval.comments || "-"}</td>
+
+                        <td>
+                          {approval.comments || "-"}
+                        </td>
+
                       </tr>
+
                     ))}
+
                   </tbody>
+
                 </table>
+
               </div>
+
             )}
         </div>
       </div>
 
       {/* Clearances */}
       <div className="card shadow-sm mb-4">
+
         <div className="card-header">
-          <h2 className="h5 mb-0">Clearances</h2>
+          <h2 className="h5 mb-0">
+            Clearances
+          </h2>
         </div>
 
         <div className="card-body">
+
           {loadingClearances && (
             <p className="text-muted">
               Loading clearances...
@@ -369,8 +564,11 @@ function HRDashboard() {
           {!loadingClearances &&
             !clearanceError &&
             clearances.length > 0 && (
+
               <div className="table-responsive">
+
                 <table className="table table-bordered table-hover">
+
                   <thead>
                     <tr>
                       <th>ID</th>
@@ -381,38 +579,64 @@ function HRDashboard() {
                   </thead>
 
                   <tbody>
+
                     {clearances.map((clearance) => (
+
                       <tr key={clearance.id}>
-                        <td>{clearance.id}</td>
-                        <td>{clearance.exit_request_id}</td>
+
                         <td>
+                          {clearance.id}
+                        </td>
+
+                        <td>
+                          {clearance.exit_request_id}
+                        </td>
+
+                        <td>
+
                           <span
                             className={
                               clearance.status === "approved"
                                 ? "badge bg-success"
+                                : clearance.status === "rejected"
+                                ? "badge bg-danger"
                                 : "badge bg-warning text-dark"
                             }
                           >
                             {clearance.status}
                           </span>
+
                         </td>
-                        <td>{clearance.comments || "-"}</td>
+
+                        <td>
+                          {clearance.comments || "-"}
+                        </td>
+
                       </tr>
+
                     ))}
+
                   </tbody>
+
                 </table>
+
               </div>
+
             )}
         </div>
       </div>
 
       {/* Exit Interviews */}
       <div className="card shadow-sm mb-4">
+
         <div className="card-header">
-          <h2 className="h5 mb-0">Exit Interviews</h2>
+          <h2 className="h5 mb-0">
+            Exit Interviews
+          </h2>
         </div>
 
         <div className="card-body">
+
           {loadingExitInterviews && (
             <p className="text-muted">
               Loading exit interviews...
@@ -436,8 +660,11 @@ function HRDashboard() {
           {!loadingExitInterviews &&
             !exitInterviewError &&
             exitInterviews.length > 0 && (
+
               <div className="table-responsive">
+
                 <table className="table table-bordered table-hover">
+
                   <thead>
                     <tr>
                       <th>ID</th>
@@ -449,20 +676,41 @@ function HRDashboard() {
                   </thead>
 
                   <tbody>
+
                     {exitInterviews.map((interview) => (
+
                       <tr key={interview.id}>
-                        <td>{interview.id}</td>
-                        <td>{interview.exit_request_id}</td>
-                        <td>{interview.feedback || "-"}</td>
+
+                        <td>
+                          {interview.id}
+                        </td>
+
+                        <td>
+                          {interview.exit_request_id}
+                        </td>
+
+                        <td>
+                          {interview.feedback || "-"}
+                        </td>
+
                         <td>
                           {interview.reason_for_leaving || "-"}
                         </td>
-                        <td>{interview.suggestions || "-"}</td>
+
+                        <td>
+                          {interview.suggestions || "-"}
+                        </td>
+
                       </tr>
+
                     ))}
+
                   </tbody>
+
                 </table>
+
               </div>
+
             )}
         </div>
       </div>

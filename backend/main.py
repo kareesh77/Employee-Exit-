@@ -32,14 +32,20 @@ from models import (
 )
 
 
-# Password hashing
+# =========================================================
+# PASSWORD HASHING
+# =========================================================
+
 pwd_context = CryptContext(
     schemes=["bcrypt"],
     deprecated="auto",
 )
 
 
-# FastAPI application
+# =========================================================
+# FASTAPI APP
+# =========================================================
+
 app = FastAPI(
     title="Employee Exit API",
     description="Backend API for Employee Exit Management System",
@@ -47,7 +53,10 @@ app = FastAPI(
 )
 
 
+# =========================================================
 # CORS
+# =========================================================
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -60,9 +69,9 @@ app.add_middleware(
 )
 
 
-# ---------------------------------------------------------
+# =========================================================
 # ROOT
-# ---------------------------------------------------------
+# =========================================================
 
 @app.get("/")
 def root():
@@ -71,9 +80,9 @@ def root():
     }
 
 
-# ---------------------------------------------------------
-# HEALTH
-# ---------------------------------------------------------
+# =========================================================
+# HEALTH CHECK
+# =========================================================
 
 @app.get("/health")
 def health_check():
@@ -82,13 +91,17 @@ def health_check():
     }
 
 
-# ---------------------------------------------------------
+# =========================================================
 # DATABASE TEST
-# ---------------------------------------------------------
+# =========================================================
 
 @app.get("/db-test")
-def database_test(db: Session = Depends(get_db)):
-    result = db.execute(text("SELECT 1")).scalar()
+def database_test(
+    db: Session = Depends(get_db)
+):
+    result = db.execute(
+        text("SELECT 1")
+    ).scalar()
 
     return {
         "database": "connected",
@@ -96,11 +109,14 @@ def database_test(db: Session = Depends(get_db)):
     }
 
 
-# ---------------------------------------------------------
+# =========================================================
 # EMPLOYEES
-# ---------------------------------------------------------
+# =========================================================
 
-@app.post("/employees", response_model=EmployeeResponse)
+@app.post(
+    "/employees",
+    response_model=EmployeeResponse
+)
 def create_employee(
     employee: EmployeeCreate,
     db: Session = Depends(get_db)
@@ -123,16 +139,24 @@ def create_employee(
     return new_employee
 
 
-@app.get("/employees", response_model=list[EmployeeResponse])
-def get_employees(db: Session = Depends(get_db)):
+@app.get(
+    "/employees",
+    response_model=list[EmployeeResponse]
+)
+def get_employees(
+    db: Session = Depends(get_db)
+):
     return db.query(Employee).all()
 
 
-# ---------------------------------------------------------
+# =========================================================
 # EXIT REQUESTS
-# ---------------------------------------------------------
+# =========================================================
 
-@app.post("/exit-requests", response_model=ExitRequestResponse)
+@app.post(
+    "/exit-requests",
+    response_model=ExitRequestResponse
+)
 def create_exit_request(
     exit_request: ExitRequestCreate,
     db: Session = Depends(get_db)
@@ -140,7 +164,9 @@ def create_exit_request(
     new_exit_request = ExitRequest(
         employee_id=exit_request.employee_id,
         reason=exit_request.reason,
-        proposed_last_working_date=exit_request.proposed_last_working_date,
+        proposed_last_working_date=(
+            exit_request.proposed_last_working_date
+        ),
     )
 
     db.add(new_exit_request)
@@ -150,16 +176,24 @@ def create_exit_request(
     return new_exit_request
 
 
-@app.get("/exit-requests", response_model=list[ExitRequestResponse])
-def get_exit_requests(db: Session = Depends(get_db)):
+@app.get(
+    "/exit-requests",
+    response_model=list[ExitRequestResponse]
+)
+def get_exit_requests(
+    db: Session = Depends(get_db)
+):
     return db.query(ExitRequest).all()
 
 
-# ---------------------------------------------------------
+# =========================================================
 # APPROVALS
-# ---------------------------------------------------------
+# =========================================================
 
-@app.post("/approvals", response_model=ApprovalResponse)
+@app.post(
+    "/approvals",
+    response_model=ApprovalResponse
+)
 def create_approval(
     approval: ApprovalCreate,
     db: Session = Depends(get_db)
@@ -178,16 +212,152 @@ def create_approval(
     return new_approval
 
 
-@app.get("/approvals", response_model=list[ApprovalResponse])
-def get_approvals(db: Session = Depends(get_db)):
+@app.get(
+    "/approvals",
+    response_model=list[ApprovalResponse]
+)
+def get_approvals(
+    db: Session = Depends(get_db)
+):
     return db.query(Approval).all()
 
 
-# ---------------------------------------------------------
-# CLEARANCES
-# ---------------------------------------------------------
+# =========================================================
+# UPDATE EXIT REQUEST STATUS
+# =========================================================
 
-@app.post("/clearances", response_model=ClearanceResponse)
+@app.put(
+    "/exit-requests/{exit_request_id}/status"
+)
+def update_exit_request_status(
+    exit_request_id: int,
+    status: str,
+    db: Session = Depends(get_db)
+):
+
+    # -----------------------------------------------------
+    # Find exit request
+    # -----------------------------------------------------
+
+    exit_request = (
+        db.query(ExitRequest)
+        .filter(
+            ExitRequest.id == exit_request_id
+        )
+        .first()
+    )
+
+    if not exit_request:
+        raise HTTPException(
+            status_code=404,
+            detail="Exit request not found"
+        )
+
+
+    # -----------------------------------------------------
+    # Validate status
+    # -----------------------------------------------------
+
+    if status not in [
+        "approved",
+        "rejected"
+    ]:
+        raise HTTPException(
+            status_code=400,
+            detail="Status must be approved or rejected"
+        )
+
+
+    # -----------------------------------------------------
+    # Update exit request
+    # -----------------------------------------------------
+
+    exit_request.status = status
+
+
+    # -----------------------------------------------------
+    # Find existing approval
+    #
+    # We use the latest approval record for this
+    # exit request.
+    # -----------------------------------------------------
+
+    existing_approval = (
+        db.query(Approval)
+        .filter(
+            Approval.exit_request_id
+            == exit_request_id
+        )
+        .order_by(
+            Approval.id.desc()
+        )
+        .first()
+    )
+
+
+    # -----------------------------------------------------
+    # Update existing approval
+    # -----------------------------------------------------
+
+    if existing_approval:
+
+        existing_approval.status = status
+
+        existing_approval.approved_by = 1
+
+        existing_approval.comments = (
+            f"Exit request {status} by HR"
+        )
+
+
+    # -----------------------------------------------------
+    # Create approval only if none exists
+    # -----------------------------------------------------
+
+    else:
+
+        new_approval = Approval(
+            exit_request_id=exit_request_id,
+            approved_by=1,
+            status=status,
+            comments=(
+                f"Exit request {status} by HR"
+            )
+        )
+
+        db.add(new_approval)
+
+
+    # -----------------------------------------------------
+    # Save changes
+    # -----------------------------------------------------
+
+    db.commit()
+
+    db.refresh(exit_request)
+
+
+    # -----------------------------------------------------
+    # Response
+    # -----------------------------------------------------
+
+    return {
+        "message": (
+            f"Exit request {status} successfully"
+        ),
+        "id": exit_request.id,
+        "status": exit_request.status
+    }
+
+
+# =========================================================
+# CLEARANCES
+# =========================================================
+
+@app.post(
+    "/clearances",
+    response_model=ClearanceResponse
+)
 def create_clearance(
     clearance: ClearanceCreate,
     db: Session = Depends(get_db)
@@ -205,16 +375,24 @@ def create_clearance(
     return new_clearance
 
 
-@app.get("/clearances", response_model=list[ClearanceResponse])
-def get_clearances(db: Session = Depends(get_db)):
+@app.get(
+    "/clearances",
+    response_model=list[ClearanceResponse]
+)
+def get_clearances(
+    db: Session = Depends(get_db)
+):
     return db.query(Clearance).all()
 
 
-# ---------------------------------------------------------
+# =========================================================
 # EXIT INTERVIEWS
-# ---------------------------------------------------------
+# =========================================================
 
-@app.post("/exit-interviews", response_model=ExitInterviewResponse)
+@app.post(
+    "/exit-interviews",
+    response_model=ExitInterviewResponse
+)
 def create_exit_interview(
     interview: ExitInterviewCreate,
     db: Session = Depends(get_db)
@@ -222,7 +400,9 @@ def create_exit_interview(
     new_interview = ExitInterview(
         exit_request_id=interview.exit_request_id,
         feedback=interview.feedback,
-        reason_for_leaving=interview.reason_for_leaving,
+        reason_for_leaving=(
+            interview.reason_for_leaving
+        ),
         suggestions=interview.suggestions,
     )
 
@@ -232,23 +412,39 @@ def create_exit_interview(
 
     return new_interview
 
-@app.get("/exit-interviews", response_model=list[ExitInterviewResponse])
-def get_exit_interviews(db: Session = Depends(get_db)):
+
+@app.get(
+    "/exit-interviews",
+    response_model=list[ExitInterviewResponse]
+)
+def get_exit_interviews(
+    db: Session = Depends(get_db)
+):
     return db.query(ExitInterview).all()
 
 
-# ---------------------------------------------------------
+# =========================================================
 # LOGIN
-# ---------------------------------------------------------
+# =========================================================
 
-@app.post("/login", response_model=LoginResponse)
+@app.post(
+    "/login",
+    response_model=LoginResponse
+)
 def login(
     login_data: LoginRequest,
     db: Session = Depends(get_db)
 ):
+
+    # -----------------------------------------------------
+    # Find user
+    # -----------------------------------------------------
+
     user = (
         db.query(User)
-        .filter(User.email == login_data.email)
+        .filter(
+            User.email == login_data.email
+        )
         .first()
     )
 
@@ -258,28 +454,52 @@ def login(
             detail="Invalid email or password",
         )
 
+
+    # -----------------------------------------------------
+    # Verify password
+    # -----------------------------------------------------
+
     try:
+
         password_valid = pwd_context.verify(
             login_data.password,
             user.password_hash,
         )
+
     except Exception:
+
         raise HTTPException(
             status_code=500,
-            detail="Unable to verify password. Check the stored password hash.",
+            detail=(
+                "Unable to verify password. "
+                "Check the stored password hash."
+            ),
         )
 
+
     if not password_valid:
+
         raise HTTPException(
             status_code=401,
             detail="Invalid email or password",
         )
 
+
+    # -----------------------------------------------------
+    # Check account
+    # -----------------------------------------------------
+
     if not user.is_active:
+
         raise HTTPException(
             status_code=403,
             detail="User account is inactive",
         )
+
+
+    # -----------------------------------------------------
+    # Login response
+    # -----------------------------------------------------
 
     return {
         "message": "Login successful",
