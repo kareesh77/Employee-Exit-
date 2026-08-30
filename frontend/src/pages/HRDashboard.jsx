@@ -22,7 +22,6 @@ function HRDashboard() {
 
   const email = sessionStorage.getItem("userEmail");
 
-  // Load employees
   useEffect(() => {
     const loadEmployees = async () => {
       try {
@@ -39,7 +38,6 @@ function HRDashboard() {
     loadEmployees();
   }, []);
 
-  // Load exit requests
   useEffect(() => {
     const loadExitRequests = async () => {
       try {
@@ -56,7 +54,6 @@ function HRDashboard() {
     loadExitRequests();
   }, []);
 
-  // Load approvals
   useEffect(() => {
     const loadApprovals = async () => {
       try {
@@ -73,7 +70,6 @@ function HRDashboard() {
     loadApprovals();
   }, []);
 
-  // Load clearances
   useEffect(() => {
     const loadClearances = async () => {
       try {
@@ -90,7 +86,6 @@ function HRDashboard() {
     loadClearances();
   }, []);
 
-  // Load exit interviews
   useEffect(() => {
     const loadExitInterviews = async () => {
       try {
@@ -107,11 +102,8 @@ function HRDashboard() {
     loadExitInterviews();
   }, []);
 
-  // Update exit request status
   const updateRequestStatus = async (requestId, status) => {
     try {
-      console.log("Updating request:", requestId, status);
-
       setExitRequestError("");
 
       const response = await api.put(
@@ -124,9 +116,8 @@ function HRDashboard() {
         }
       );
 
-      console.log("Update successful:", response.data);
+      console.log("Exit request updated:", response.data);
 
-      // Update the request on the screen immediately
       setExitRequests((previous) =>
         previous.map((request) =>
           request.id === requestId
@@ -138,35 +129,60 @@ function HRDashboard() {
         )
       );
 
-      // Reload approvals so the Approvals section stays updated
-      try {
-        const approvalsResponse = await api.get("/approvals");
-        setApprovals(approvalsResponse.data);
-      } catch (approvalLoadError) {
-        console.error(
-          "Failed to reload approvals:",
-          approvalLoadError
-        );
-      }
+      const approvalsResponse = await api.get("/approvals");
+      setApprovals(approvalsResponse.data);
     } catch (error) {
       console.error("Failed to update exit request:", error);
       console.error("Response:", error.response?.data);
 
       const detail = error.response?.data?.detail;
 
-      let errorMessage = "Unable to update exit request.";
+      if (typeof detail === "string") {
+        setExitRequestError(detail);
+      } else {
+        setExitRequestError("Unable to update exit request.");
+      }
+    }
+  };
+
+  const updateClearanceStatus = async (clearanceId, status) => {
+    try {
+      setClearanceError("");
+
+      const response = await api.put(
+        `/clearances/${clearanceId}/status`,
+        null,
+        {
+          params: {
+            status: status,
+          },
+        }
+      );
+
+      console.log("Clearance updated:", response.data);
+
+      setClearances((previous) =>
+        previous.map((clearance) =>
+          clearance.id === clearanceId
+            ? {
+                ...clearance,
+                status: status,
+                comments: `Clearance ${status} by HR`,
+              }
+            : clearance
+        )
+      );
+    } catch (error) {
+      console.error("Failed to update clearance:", error);
+      console.error("Response:", error.response?.data);
+
+      const detail = error.response?.data?.detail;
 
       if (typeof detail === "string") {
-        errorMessage = detail;
-      } else if (Array.isArray(detail)) {
-        errorMessage = detail
-          .map((item) => item?.msg || "Validation error")
-          .join(", ");
-      } else if (detail && typeof detail === "object") {
-        errorMessage = detail.msg || "Unable to update exit request.";
+        setClearanceError(detail);
+      } else {
+        setClearanceError("Unable to update clearance.");
       }
-
-      setExitRequestError(errorMessage);
     }
   };
 
@@ -178,7 +194,7 @@ function HRDashboard() {
   return (
     <div className="container py-5">
 
-      {/* Header */}
+      {/* HEADER */}
       <div className="d-flex justify-content-between align-items-center mb-4">
         <div>
           <h1 className="mb-1">HR Dashboard</h1>
@@ -196,15 +212,21 @@ function HRDashboard() {
         </button>
       </div>
 
-      {/* Login status */}
+      {/* LOGIN STATUS */}
       <div className="alert alert-success">
         You are logged in as an HR administrator.
       </div>
 
-      {/* Employees */}
+      {/* =====================================================
+          EMPLOYEES
+      ====================================================== */}
+
       <div className="card shadow-sm mb-4">
+
         <div className="card-header">
-          <h2 className="h5 mb-0">Employees</h2>
+          <h2 className="h5 mb-0">
+            Employees
+          </h2>
         </div>
 
         <div className="card-body">
@@ -232,7 +254,9 @@ function HRDashboard() {
           {!loadingEmployees &&
             !employeeError &&
             employees.length > 0 && (
+
               <div className="table-responsive">
+
                 <table className="table table-bordered table-hover">
 
                   <thead>
@@ -250,8 +274,14 @@ function HRDashboard() {
                   <tbody>
                     {employees.map((employee) => (
                       <tr key={employee.id}>
-                        <td>{employee.id}</td>
-                        <td>{employee.employee_code}</td>
+
+                        <td>
+                          {employee.id}
+                        </td>
+
+                        <td>
+                          {employee.employee_code}
+                        </td>
 
                         <td>
                           {employee.first_name}{" "}
@@ -273,17 +303,19 @@ function HRDashboard() {
                         <td>
                           {employee.joining_date}
                         </td>
+
                       </tr>
                     ))}
                   </tbody>
 
                 </table>
+
               </div>
             )}
+
         </div>
       </div>
 
-      {/* Exit Requests */}
       <div className="card shadow-sm mb-4">
 
         <div className="card-header">
@@ -426,10 +458,10 @@ function HRDashboard() {
               </div>
 
             )}
+
         </div>
       </div>
 
-      {/* Approvals */}
       <div className="card shadow-sm mb-4">
 
         <div className="card-header">
@@ -527,10 +559,9 @@ function HRDashboard() {
               </div>
 
             )}
+
         </div>
       </div>
-
-      {/* Clearances */}
       <div className="card shadow-sm mb-4">
 
         <div className="card-header">
@@ -575,6 +606,7 @@ function HRDashboard() {
                       <th>Exit Request ID</th>
                       <th>Status</th>
                       <th>Comments</th>
+                      <th>Action</th>
                     </tr>
                   </thead>
 
@@ -612,6 +644,50 @@ function HRDashboard() {
                           {clearance.comments || "-"}
                         </td>
 
+                        <td>
+
+                          {clearance.status === "pending" ? (
+
+                            <div className="d-flex gap-2">
+
+                              <button
+                                type="button"
+                                className="btn btn-success btn-sm"
+                                onClick={() =>
+                                  updateClearanceStatus(
+                                    clearance.id,
+                                    "approved"
+                                  )
+                                }
+                              >
+                                Approve
+                              </button>
+
+                              <button
+                                type="button"
+                                className="btn btn-danger btn-sm"
+                                onClick={() =>
+                                  updateClearanceStatus(
+                                    clearance.id,
+                                    "rejected"
+                                  )
+                                }
+                              >
+                                Reject
+                              </button>
+
+                            </div>
+
+                          ) : (
+
+                            <span className="text-muted">
+                              Processed
+                            </span>
+
+                          )}
+
+                        </td>
+
                       </tr>
 
                     ))}
@@ -623,10 +699,14 @@ function HRDashboard() {
               </div>
 
             )}
+
         </div>
       </div>
 
-      {/* Exit Interviews */}
+      {/* =====================================================
+          EXIT INTERVIEWS
+      ====================================================== */}
+
       <div className="card shadow-sm mb-4">
 
         <div className="card-header">
@@ -712,6 +792,7 @@ function HRDashboard() {
               </div>
 
             )}
+
         </div>
       </div>
 

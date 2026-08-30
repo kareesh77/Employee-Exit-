@@ -31,31 +31,16 @@ from models import (
     ExitInterview,
 )
 
-
-# =========================================================
-# PASSWORD HASHING
-# =========================================================
-
 pwd_context = CryptContext(
     schemes=["bcrypt"],
     deprecated="auto",
 )
-
-
-# =========================================================
-# FASTAPI APP
-# =========================================================
 
 app = FastAPI(
     title="Employee Exit API",
     description="Backend API for Employee Exit Management System",
     version="1.0.0",
 )
-
-
-# =========================================================
-# CORS
-# =========================================================
 
 app.add_middleware(
     CORSMiddleware,
@@ -68,32 +53,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-# =========================================================
-# ROOT
-# =========================================================
-
 @app.get("/")
 def root():
     return {
         "message": "Employee Exit API is running successfully"
     }
 
-
-# =========================================================
-# HEALTH CHECK
-# =========================================================
-
 @app.get("/health")
 def health_check():
     return {
         "status": "healthy"
     }
-
-
-# =========================================================
-# DATABASE TEST
-# =========================================================
 
 @app.get("/db-test")
 def database_test(
@@ -107,11 +77,6 @@ def database_test(
         "database": "connected",
         "test": result
     }
-
-
-# =========================================================
-# EMPLOYEES
-# =========================================================
 
 @app.post(
     "/employees",
@@ -138,7 +103,6 @@ def create_employee(
 
     return new_employee
 
-
 @app.get(
     "/employees",
     response_model=list[EmployeeResponse]
@@ -147,11 +111,6 @@ def get_employees(
     db: Session = Depends(get_db)
 ):
     return db.query(Employee).all()
-
-
-# =========================================================
-# EXIT REQUESTS
-# =========================================================
 
 @app.post(
     "/exit-requests",
@@ -175,7 +134,6 @@ def create_exit_request(
 
     return new_exit_request
 
-
 @app.get(
     "/exit-requests",
     response_model=list[ExitRequestResponse]
@@ -184,11 +142,6 @@ def get_exit_requests(
     db: Session = Depends(get_db)
 ):
     return db.query(ExitRequest).all()
-
-
-# =========================================================
-# APPROVALS
-# =========================================================
 
 @app.post(
     "/approvals",
@@ -211,7 +164,6 @@ def create_approval(
 
     return new_approval
 
-
 @app.get(
     "/approvals",
     response_model=list[ApprovalResponse]
@@ -221,11 +173,6 @@ def get_approvals(
 ):
     return db.query(Approval).all()
 
-
-# =========================================================
-# UPDATE EXIT REQUEST STATUS
-# =========================================================
-
 @app.put(
     "/exit-requests/{exit_request_id}/status"
 )
@@ -234,10 +181,6 @@ def update_exit_request_status(
     status: str,
     db: Session = Depends(get_db)
 ):
-
-    # -----------------------------------------------------
-    # Find exit request
-    # -----------------------------------------------------
 
     exit_request = (
         db.query(ExitRequest)
@@ -253,11 +196,6 @@ def update_exit_request_status(
             detail="Exit request not found"
         )
 
-
-    # -----------------------------------------------------
-    # Validate status
-    # -----------------------------------------------------
-
     if status not in [
         "approved",
         "rejected"
@@ -267,20 +205,7 @@ def update_exit_request_status(
             detail="Status must be approved or rejected"
         )
 
-
-    # -----------------------------------------------------
-    # Update exit request
-    # -----------------------------------------------------
-
     exit_request.status = status
-
-
-    # -----------------------------------------------------
-    # Find existing approval
-    #
-    # We use the latest approval record for this
-    # exit request.
-    # -----------------------------------------------------
 
     existing_approval = (
         db.query(Approval)
@@ -294,11 +219,6 @@ def update_exit_request_status(
         .first()
     )
 
-
-    # -----------------------------------------------------
-    # Update existing approval
-    # -----------------------------------------------------
-
     if existing_approval:
 
         existing_approval.status = status
@@ -308,11 +228,6 @@ def update_exit_request_status(
         existing_approval.comments = (
             f"Exit request {status} by HR"
         )
-
-
-    # -----------------------------------------------------
-    # Create approval only if none exists
-    # -----------------------------------------------------
 
     else:
 
@@ -327,19 +242,9 @@ def update_exit_request_status(
 
         db.add(new_approval)
 
-
-    # -----------------------------------------------------
-    # Save changes
-    # -----------------------------------------------------
-
     db.commit()
 
     db.refresh(exit_request)
-
-
-    # -----------------------------------------------------
-    # Response
-    # -----------------------------------------------------
 
     return {
         "message": (
@@ -348,11 +253,6 @@ def update_exit_request_status(
         "id": exit_request.id,
         "status": exit_request.status
     }
-
-
-# =========================================================
-# CLEARANCES
-# =========================================================
 
 @app.post(
     "/clearances",
@@ -374,7 +274,6 @@ def create_clearance(
 
     return new_clearance
 
-
 @app.get(
     "/clearances",
     response_model=list[ClearanceResponse]
@@ -384,10 +283,39 @@ def get_clearances(
 ):
     return db.query(Clearance).all()
 
+@app.put("/clearances/{clearance_id}/status")
+def update_clearance_status(
+    clearance_id: int,
+    status: str,
+    db: Session = Depends(get_db)
+):
+    clearance = (
+        db.query(Clearance)
+        .filter(Clearance.id == clearance_id)
+        .first()
+    )
 
-# =========================================================
-# EXIT INTERVIEWS
-# =========================================================
+    if not clearance:
+        raise HTTPException(
+            status_code=404,
+            detail="Clearance not found"
+        )
+    if status not in ["approved", "rejected"]:
+        raise HTTPException(
+            status_code=400,
+            detail="Status must be approved or rejected"
+        )
+    clearance.status = status
+    clearance.comments = f"Clearance {status} by HR"
+
+    db.commit()
+    db.refresh(clearance)
+
+    return {
+        "message": f"Clearance {status} successfully",
+        "id": clearance.id,
+        "status": clearance.status
+    }
 
 @app.post(
     "/exit-interviews",
@@ -412,7 +340,6 @@ def create_exit_interview(
 
     return new_interview
 
-
 @app.get(
     "/exit-interviews",
     response_model=list[ExitInterviewResponse]
@@ -422,11 +349,6 @@ def get_exit_interviews(
 ):
     return db.query(ExitInterview).all()
 
-
-# =========================================================
-# LOGIN
-# =========================================================
-
 @app.post(
     "/login",
     response_model=LoginResponse
@@ -435,10 +357,6 @@ def login(
     login_data: LoginRequest,
     db: Session = Depends(get_db)
 ):
-
-    # -----------------------------------------------------
-    # Find user
-    # -----------------------------------------------------
 
     user = (
         db.query(User)
@@ -453,11 +371,6 @@ def login(
             status_code=401,
             detail="Invalid email or password",
         )
-
-
-    # -----------------------------------------------------
-    # Verify password
-    # -----------------------------------------------------
 
     try:
 
@@ -476,7 +389,6 @@ def login(
             ),
         )
 
-
     if not password_valid:
 
         raise HTTPException(
@@ -484,22 +396,12 @@ def login(
             detail="Invalid email or password",
         )
 
-
-    # -----------------------------------------------------
-    # Check account
-    # -----------------------------------------------------
-
     if not user.is_active:
 
         raise HTTPException(
             status_code=403,
             detail="User account is inactive",
         )
-
-
-    # -----------------------------------------------------
-    # Login response
-    # -----------------------------------------------------
 
     return {
         "message": "Login successful",

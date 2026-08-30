@@ -257,7 +257,14 @@ function EmployeeDashboard() {
                         {request.proposed_last_working_date}
                       </td>
                       <td>
-                        <span className="badge bg-warning text-dark">
+                        <span
+                          className={`badge ${request.status === "approved"
+                              ? "bg-success"
+                              : request.status === "rejected"
+                                ? "bg-danger"
+                                : "bg-warning text-dark"
+                            }`}
+                        >
                           {request.status}
                         </span>
                       </td>
