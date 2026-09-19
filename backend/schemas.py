@@ -92,6 +92,7 @@ class ExitInterviewCreate(BaseModel):
     feedback: str | None = None
     reason_for_leaving: str | None = None
     suggestions: str | None = None
+    user_id: int | None = None
 
 
 class ExitInterviewResponse(ExitInterviewCreate):
@@ -99,6 +100,8 @@ class ExitInterviewResponse(ExitInterviewCreate):
 
     class Config:
         from_attributes = True
+
+
 class LoginRequest(BaseModel):
     email: str
     password: str
@@ -109,4 +112,3 @@ class LoginResponse(BaseModel):
     user_id: int
     email: str
     role: str
-    

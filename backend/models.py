@@ -68,9 +68,9 @@ class Clearance(Base):
 
 class ExitInterview(Base):
     __tablename__ = "exit_interviews"
-
     id = Column(Integer, primary_key=True, index=True)
     exit_request_id = Column(Integer, ForeignKey("exit_requests.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     feedback = Column(Text, nullable=True)
     reason_for_leaving = Column(Text, nullable=True)
     suggestions = Column(Text, nullable=True)

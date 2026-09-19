@@ -1,4 +1,6 @@
 from passlib.context import CryptContext
+from jose import jwt
+from datetime import datetime, timedelta, timezone
 
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -29,12 +31,34 @@ from models import (
     Approval,
     Clearance,
     ExitInterview,
+    AuditLog,
 )
 
 pwd_context = CryptContext(
     schemes=["bcrypt"],
     deprecated="auto",
 )
+
+SECRET_KEY = "employee-exit-management-secret-key-change-this"
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60
+
+def create_access_token(user_id: int, role: str):
+    expire = datetime.now(timezone.utc) + timedelta(
+        minutes=ACCESS_TOKEN_EXPIRE_MINUTES
+    )
+
+    payload = {
+        "user_id": user_id,
+        "role": role,
+        "exp": expire,
+    }
+
+    return jwt.encode(
+        payload,
+        SECRET_KEY,
+        algorithm=ALGORITHM
+    )
 
 app = FastAPI(
     title="Employee Exit API",
@@ -53,17 +77,37 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+def create_audit_log(
+    db: Session,
+    user_id: int | None,
+    action: str,
+    entity_type: str,
+    entity_id: int | None = None,
+):
+    audit = AuditLog(
+        user_id=user_id,
+        action=action,
+        entity_type=entity_type,
+        entity_id=entity_id,
+    )
+
+    db.add(audit)
+
+
 @app.get("/")
 def root():
     return {
         "message": "Employee Exit API is running successfully"
     }
 
+
 @app.get("/health")
 def health_check():
     return {
         "status": "healthy"
     }
+
 
 @app.get("/db-test")
 def database_test(
@@ -77,6 +121,7 @@ def database_test(
         "database": "connected",
         "test": result
     }
+
 
 @app.post(
     "/employees",
@@ -101,7 +146,18 @@ def create_employee(
     db.commit()
     db.refresh(new_employee)
 
+    create_audit_log(
+        db=db,
+        user_id=employee.user_id,
+        action="Employee created",
+        entity_type="Employee",
+        entity_id=new_employee.id,
+    )
+
+    db.commit()
+
     return new_employee
+
 
 @app.get(
     "/employees",
@@ -111,6 +167,7 @@ def get_employees(
     db: Session = Depends(get_db)
 ):
     return db.query(Employee).all()
+
 
 @app.post(
     "/exit-requests",
@@ -132,7 +189,18 @@ def create_exit_request(
     db.commit()
     db.refresh(new_exit_request)
 
+    create_audit_log(
+        db=db,
+        user_id=None,
+        action="Exit request created",
+        entity_type="ExitRequest",
+        entity_id=new_exit_request.id,
+    )
+
+    db.commit()
+
     return new_exit_request
+
 
 @app.get(
     "/exit-requests",
@@ -142,6 +210,7 @@ def get_exit_requests(
     db: Session = Depends(get_db)
 ):
     return db.query(ExitRequest).all()
+
 
 @app.post(
     "/approvals",
@@ -162,7 +231,18 @@ def create_approval(
     db.commit()
     db.refresh(new_approval)
 
+    create_audit_log(
+        db=db,
+        user_id=approval.approved_by,
+        action=f"Approval {approval.status}",
+        entity_type="Approval",
+        entity_id=new_approval.id,
+    )
+
+    db.commit()
+
     return new_approval
+
 
 @app.get(
     "/approvals",
@@ -173,14 +253,33 @@ def get_approvals(
 ):
     return db.query(Approval).all()
 
+
 @app.put(
     "/exit-requests/{exit_request_id}/status"
 )
 def update_exit_request_status(
     exit_request_id: int,
     status: str,
+    user_id: int,
     db: Session = Depends(get_db)
 ):
+    user = (
+        db.query(User)
+        .filter(User.id == user_id)
+        .first()
+    )
+
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="User not found"
+        )
+
+    if user.role not in ["admin", "hr"]:
+        raise HTTPException(
+            status_code=403,
+            detail="Only HR administrators can approve exit requests"
+        )
 
     exit_request = (
         db.query(ExitRequest)
@@ -207,6 +306,25 @@ def update_exit_request_status(
 
     exit_request.status = status
 
+    if status == "approved":
+        existing_clearance = (
+            db.query(Clearance)
+            .filter(
+                Clearance.exit_request_id
+                == exit_request_id
+            )
+            .first()
+        )
+
+        if not existing_clearance:
+            new_clearance = Clearance(
+                exit_request_id=exit_request_id,
+                status="pending",
+                comments="Clearance pending HR review"
+            )
+
+            db.add(new_clearance)
+
     existing_approval = (
         db.query(Approval)
         .filter(
@@ -220,20 +338,15 @@ def update_exit_request_status(
     )
 
     if existing_approval:
-
         existing_approval.status = status
-
-        existing_approval.approved_by = 1
-
+        existing_approval.approved_by = user_id
         existing_approval.comments = (
             f"Exit request {status} by HR"
         )
-
     else:
-
         new_approval = Approval(
             exit_request_id=exit_request_id,
-            approved_by=1,
+            approved_by=user_id,
             status=status,
             comments=(
                 f"Exit request {status} by HR"
@@ -242,8 +355,15 @@ def update_exit_request_status(
 
         db.add(new_approval)
 
-    db.commit()
+    create_audit_log(
+        db=db,
+        user_id=user_id,
+        action=f"Exit request {status} by HR",
+        entity_type="ExitRequest",
+        entity_id=exit_request.id,
+    )
 
+    db.commit()
     db.refresh(exit_request)
 
     return {
@@ -253,6 +373,7 @@ def update_exit_request_status(
         "id": exit_request.id,
         "status": exit_request.status
     }
+
 
 @app.post(
     "/clearances",
@@ -272,7 +393,18 @@ def create_clearance(
     db.commit()
     db.refresh(new_clearance)
 
+    create_audit_log(
+        db=db,
+        user_id=None,
+        action="Clearance created",
+        entity_type="Clearance",
+        entity_id=new_clearance.id,
+    )
+
+    db.commit()
+
     return new_clearance
+
 
 @app.get(
     "/clearances",
@@ -283,12 +415,32 @@ def get_clearances(
 ):
     return db.query(Clearance).all()
 
+
 @app.put("/clearances/{clearance_id}/status")
 def update_clearance_status(
     clearance_id: int,
     status: str,
+    user_id: int,
     db: Session = Depends(get_db)
 ):
+    user = (
+        db.query(User)
+        .filter(User.id == user_id)
+        .first()
+    )
+
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="User not found"
+        )
+
+    if user.role not in ["admin", "hr"]:
+        raise HTTPException(
+            status_code=403,
+            detail="Only HR administrators can approve clearances"
+        )
+
     clearance = (
         db.query(Clearance)
         .filter(Clearance.id == clearance_id)
@@ -300,13 +452,26 @@ def update_clearance_status(
             status_code=404,
             detail="Clearance not found"
         )
-    if status not in ["approved", "rejected"]:
+
+    if status not in [
+        "approved",
+        "rejected"
+    ]:
         raise HTTPException(
             status_code=400,
             detail="Status must be approved or rejected"
         )
+
     clearance.status = status
     clearance.comments = f"Clearance {status} by HR"
+
+    create_audit_log(
+        db=db,
+        user_id=user_id,
+        action=f"Clearance {status} by HR",
+        entity_type="Clearance",
+        entity_id=clearance.id,
+    )
 
     db.commit()
     db.refresh(clearance)
@@ -327,10 +492,9 @@ def create_exit_interview(
 ):
     new_interview = ExitInterview(
         exit_request_id=interview.exit_request_id,
+        user_id=interview.user_id,
         feedback=interview.feedback,
-        reason_for_leaving=(
-            interview.reason_for_leaving
-        ),
+        reason_for_leaving=interview.reason_for_leaving,
         suggestions=interview.suggestions,
     )
 
@@ -338,7 +502,18 @@ def create_exit_interview(
     db.commit()
     db.refresh(new_interview)
 
+    create_audit_log(
+        db=db,
+        user_id=interview.user_id,
+        action="Exit interview created",
+        entity_type="ExitInterview",
+        entity_id=new_interview.id,
+    )
+
+    db.commit()
+
     return new_interview
+
 
 @app.get(
     "/exit-interviews",
@@ -349,6 +524,7 @@ def get_exit_interviews(
 ):
     return db.query(ExitInterview).all()
 
+
 @app.post(
     "/login",
     response_model=LoginResponse
@@ -357,7 +533,6 @@ def login(
     login_data: LoginRequest,
     db: Session = Depends(get_db)
 ):
-
     user = (
         db.query(User)
         .filter(
@@ -373,14 +548,11 @@ def login(
         )
 
     try:
-
         password_valid = pwd_context.verify(
             login_data.password,
             user.password_hash,
         )
-
     except Exception:
-
         raise HTTPException(
             status_code=500,
             detail=(
@@ -390,22 +562,39 @@ def login(
         )
 
     if not password_valid:
-
         raise HTTPException(
             status_code=401,
             detail="Invalid email or password",
         )
 
     if not user.is_active:
-
         raise HTTPException(
             status_code=403,
             detail="User account is inactive",
         )
 
+    access_token = create_access_token(
+    user_id=user.id,
+    role=user.role
+)
+
     return {
-        "message": "Login successful",
-        "user_id": user.id,
-        "email": user.email,
-        "role": user.role,
-    }
+    "message": "Login successful",
+    "access_token": access_token,
+    "user_id": user.id,
+    "email": user.email,
+    "role": user.role
+}
+
+
+@app.get("/audit-logs")
+def get_audit_logs(
+    db: Session = Depends(get_db)
+):
+    logs = (
+        db.query(AuditLog)
+        .order_by(AuditLog.id.desc())
+        .all()
+    )
+
+    return logs
