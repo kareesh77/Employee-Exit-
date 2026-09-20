@@ -29,21 +29,21 @@ function HRDashboard() {
   const [creatingInterview, setCreatingInterview] = useState(false);
 
   const email = sessionStorage.getItem("userEmail");
-  const userId = sessionStorage.getItem("userId");
-  const userRole = sessionStorage.getItem("userRole");
 
   useEffect(() => {
-    const loadAuditLogs = async () => {
+    const loadEmployees = async () => {
       try {
-        const response = await api.get("/audit-logs");
-        setAuditLogs(response.data);
+        const response = await api.get("/employees");
+        setEmployees(response.data);
       } catch (error) {
-        console.error("Failed to load audit logs:", error);
-        setAuditLogError("Unable to load audit logs.");
+        console.error("Failed to load employees:", error);
+        setEmployeeError("Unable to load employees.");
+      } finally {
+        setLoadingEmployees(false);
       }
     };
 
-    loadAuditLogs();
+    loadEmployees();
   }, []);
 
   useEffect(() => {
@@ -110,9 +110,25 @@ function HRDashboard() {
     loadExitInterviews();
   }, []);
 
+  useEffect(() => {
+    const loadAuditLogs = async () => {
+      try {
+        const response = await api.get("/audit-logs");
+        setAuditLogs(response.data);
+      } catch (error) {
+        console.error("Failed to load audit logs:", error);
+        setAuditLogError("Unable to load audit logs.");
+      }
+    };
+
+    loadAuditLogs();
+  }, []);
+
   const updateRequestStatus = async (requestId, status) => {
     try {
       setExitRequestError("");
+
+      const token = sessionStorage.getItem("accessToken");
 
       const response = await api.put(
         `/exit-requests/${requestId}/status`,
@@ -120,7 +136,9 @@ function HRDashboard() {
         {
           params: {
             status: status,
-            user_id: Number(userId),
+          },
+          headers: {
+            Authorization: `Bearer ${token}`,
           },
         }
       );
@@ -163,13 +181,17 @@ function HRDashboard() {
     try {
       setClearanceError("");
 
+      const token = sessionStorage.getItem("accessToken");
+
       const response = await api.put(
         `/clearances/${clearanceId}/status`,
         null,
         {
           params: {
             status: status,
-            user_id: Number(userId),
+          },
+          headers: {
+            Authorization: `Bearer ${token}`,
           },
         }
       );
@@ -213,13 +235,22 @@ function HRDashboard() {
       setCreatingInterview(true);
       setExitInterviewError("");
 
-      const response = await api.post("/exit-interviews", {
-        exit_request_id: Number(selectedExitRequest),
-        feedback,
-        reason_for_leaving: reasonForLeaving,
-        suggestions,
-        user_id: Number(sessionStorage.getItem("userId")),
-      });
+      const token = sessionStorage.getItem("accessToken");
+
+      const response = await api.post(
+        "/exit-interviews",
+        {
+          exit_request_id: Number(selectedExitRequest),
+          feedback,
+          reason_for_leaving: reasonForLeaving,
+          suggestions,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
 
       console.log("Exit interview created:", response.data);
 

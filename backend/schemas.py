@@ -109,6 +109,7 @@ class LoginRequest(BaseModel):
 
 class LoginResponse(BaseModel):
     message: str
+    access_token: str
     user_id: int
     email: str
     role: str

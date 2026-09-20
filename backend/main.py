@@ -1,8 +1,15 @@
 from passlib.context import CryptContext
+import os
+
+from dotenv import load_dotenv
 from jose import jwt
+
+load_dotenv(r"C:\Users\victu\OneDrive\Documents\Employee-Exit-\.env")
+
 from datetime import datetime, timedelta, timezone
 
 from fastapi import FastAPI, Depends, HTTPException
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -34,14 +41,28 @@ from models import (
     AuditLog,
 )
 
+
 pwd_context = CryptContext(
     schemes=["bcrypt"],
     deprecated="auto",
 )
 
-SECRET_KEY = "employee-exit-management-secret-key-change-this"
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60
+SECRET_KEY = os.getenv("SECRET_KEY")
+
+ALGORITHM = os.getenv(
+    "ALGORITHM",
+    "HS256"
+)
+
+ACCESS_TOKEN_EXPIRE_MINUTES = int(
+    os.getenv(
+        "ACCESS_TOKEN_EXPIRE_MINUTES",
+        "60"
+    )
+)
+
+security = HTTPBearer()
+
 
 def create_access_token(user_id: int, role: str):
     expire = datetime.now(timezone.utc) + timedelta(
@@ -60,11 +81,55 @@ def create_access_token(user_id: int, role: str):
         algorithm=ALGORITHM
     )
 
+
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+):
+    token = credentials.credentials
+
+    try:
+        payload = jwt.decode(
+            token,
+            SECRET_KEY,
+            algorithms=[ALGORITHM]
+        )
+
+        user_id = payload.get("user_id")
+
+        if user_id is None:
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid token"
+            )
+
+    except Exception:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired token"
+        )
+
+    user = (
+        db.query(User)
+        .filter(User.id == user_id)
+        .first()
+    )
+
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="User not found"
+        )
+
+    return user
+
+
 app = FastAPI(
     title="Employee Exit API",
     description="Backend API for Employee Exit Management System",
     version="1.0.0",
 )
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -212,6 +277,78 @@ def get_exit_requests(
     return db.query(ExitRequest).all()
 
 
+@app.put("/exit-requests/{exit_request_id}/status")
+def update_exit_request_status(
+    exit_request_id: int,
+    status: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if current_user.role not in ["admin", "hr"]:
+        raise HTTPException(
+            status_code=403,
+            detail="Only HR administrators can update exit requests"
+        )
+
+    exit_request = (
+        db.query(ExitRequest)
+        .filter(ExitRequest.id == exit_request_id)
+        .first()
+    )
+
+    if not exit_request:
+        raise HTTPException(
+            status_code=404,
+            detail="Exit request not found"
+        )
+
+    if status not in ["approved", "rejected"]:
+        raise HTTPException(
+            status_code=400,
+            detail="Status must be approved or rejected"
+        )
+
+    exit_request.status = status
+
+    approval = (
+        db.query(Approval)
+        .filter(
+            Approval.exit_request_id == exit_request.id
+        )
+        .first()
+    )
+
+    if approval:
+        approval.status = status
+        approval.approved_by = current_user.id
+        approval.comments = f"Exit request {status} by HR"
+    else:
+        approval = Approval(
+            exit_request_id=exit_request.id,
+            approved_by=current_user.id,
+            status=status,
+            comments=f"Exit request {status} by HR"
+        )
+        db.add(approval)
+
+    create_audit_log(
+        db=db,
+        user_id=current_user.id,
+        action=f"Exit request {status} by HR",
+        entity_type="ExitRequest",
+        entity_id=exit_request.id,
+    )
+
+    db.commit()
+    db.refresh(exit_request)
+
+    return {
+        "message": f"Exit request {status} successfully",
+        "id": exit_request.id,
+        "status": exit_request.status
+    }
+
+
 @app.post(
     "/approvals",
     response_model=ApprovalResponse
@@ -252,127 +389,6 @@ def get_approvals(
     db: Session = Depends(get_db)
 ):
     return db.query(Approval).all()
-
-
-@app.put(
-    "/exit-requests/{exit_request_id}/status"
-)
-def update_exit_request_status(
-    exit_request_id: int,
-    status: str,
-    user_id: int,
-    db: Session = Depends(get_db)
-):
-    user = (
-        db.query(User)
-        .filter(User.id == user_id)
-        .first()
-    )
-
-    if not user:
-        raise HTTPException(
-            status_code=401,
-            detail="User not found"
-        )
-
-    if user.role not in ["admin", "hr"]:
-        raise HTTPException(
-            status_code=403,
-            detail="Only HR administrators can approve exit requests"
-        )
-
-    exit_request = (
-        db.query(ExitRequest)
-        .filter(
-            ExitRequest.id == exit_request_id
-        )
-        .first()
-    )
-
-    if not exit_request:
-        raise HTTPException(
-            status_code=404,
-            detail="Exit request not found"
-        )
-
-    if status not in [
-        "approved",
-        "rejected"
-    ]:
-        raise HTTPException(
-            status_code=400,
-            detail="Status must be approved or rejected"
-        )
-
-    exit_request.status = status
-
-    if status == "approved":
-        existing_clearance = (
-            db.query(Clearance)
-            .filter(
-                Clearance.exit_request_id
-                == exit_request_id
-            )
-            .first()
-        )
-
-        if not existing_clearance:
-            new_clearance = Clearance(
-                exit_request_id=exit_request_id,
-                status="pending",
-                comments="Clearance pending HR review"
-            )
-
-            db.add(new_clearance)
-
-    existing_approval = (
-        db.query(Approval)
-        .filter(
-            Approval.exit_request_id
-            == exit_request_id
-        )
-        .order_by(
-            Approval.id.desc()
-        )
-        .first()
-    )
-
-    if existing_approval:
-        existing_approval.status = status
-        existing_approval.approved_by = user_id
-        existing_approval.comments = (
-            f"Exit request {status} by HR"
-        )
-    else:
-        new_approval = Approval(
-            exit_request_id=exit_request_id,
-            approved_by=user_id,
-            status=status,
-            comments=(
-                f"Exit request {status} by HR"
-            )
-        )
-
-        db.add(new_approval)
-
-    create_audit_log(
-        db=db,
-        user_id=user_id,
-        action=f"Exit request {status} by HR",
-        entity_type="ExitRequest",
-        entity_id=exit_request.id,
-    )
-
-    db.commit()
-    db.refresh(exit_request)
-
-    return {
-        "message": (
-            f"Exit request {status} successfully"
-        ),
-        "id": exit_request.id,
-        "status": exit_request.status
-    }
 
 
 @app.post(
@@ -420,22 +436,10 @@ def get_clearances(
 def update_clearance_status(
     clearance_id: int,
     status: str,
-    user_id: int,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    user = (
-        db.query(User)
-        .filter(User.id == user_id)
-        .first()
-    )
-
-    if not user:
-        raise HTTPException(
-            status_code=401,
-            detail="User not found"
-        )
-
-    if user.role not in ["admin", "hr"]:
+    if current_user.role not in ["admin", "hr"]:
         raise HTTPException(
             status_code=403,
             detail="Only HR administrators can approve clearances"
@@ -453,10 +457,7 @@ def update_clearance_status(
             detail="Clearance not found"
         )
 
-    if status not in [
-        "approved",
-        "rejected"
-    ]:
+    if status not in ["approved", "rejected"]:
         raise HTTPException(
             status_code=400,
             detail="Status must be approved or rejected"
@@ -467,7 +468,7 @@ def update_clearance_status(
 
     create_audit_log(
         db=db,
-        user_id=user_id,
+        user_id=current_user.id,
         action=f"Clearance {status} by HR",
         entity_type="Clearance",
         entity_id=clearance.id,
@@ -481,6 +482,7 @@ def update_clearance_status(
         "id": clearance.id,
         "status": clearance.status
     }
+
 
 @app.post(
     "/exit-interviews",
@@ -574,17 +576,17 @@ def login(
         )
 
     access_token = create_access_token(
-    user_id=user.id,
-    role=user.role
-)
+        user_id=user.id,
+        role=user.role
+    )
 
     return {
-    "message": "Login successful",
-    "access_token": access_token,
-    "user_id": user.id,
-    "email": user.email,
-    "role": user.role
-}
+        "message": "Login successful",
+        "access_token": access_token,
+        "user_id": user.id,
+        "email": user.email,
+        "role": user.role
+    }
 
 
 @app.get("/audit-logs")
