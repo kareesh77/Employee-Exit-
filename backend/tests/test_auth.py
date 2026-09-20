@@ -57,11 +57,14 @@ def test_get_current_user_without_user_id():
 def test_password_hash_and_verify():
     password = "TestPassword123!"
 
-    hashed = pwd_context.hash(password)
+    hashed = main.pwd_context.hash(password)
 
-    assert pwd_context.verify(password, hashed)
+    assert main.pwd_context.verify(
+        password,
+        hashed
+    )
 
     assert not main.pwd_context.verify(
         "WrongPassword",
-        hashed_password
+        hashed
     )
