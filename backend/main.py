@@ -1,46 +1,43 @@
-from passlib.context import CryptContext
 import os
 
 from dotenv import load_dotenv
 from jose import jwt
+from passlib.context import CryptContext
 
 load_dotenv(r"C:\Users\victu\OneDrive\Documents\Employee-Exit-\.env")
 
 from datetime import datetime, timedelta, timezone
 
-from fastapi import FastAPI, Depends, HTTPException
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from database import get_db
-
+from models import (
+    Approval,
+    AuditLog,
+    Clearance,
+    Employee,
+    ExitInterview,
+    ExitRequest,
+    User,
+)
 from schemas import (
-    EmployeeCreate,
-    EmployeeResponse,
-    ExitRequestCreate,
-    ExitRequestResponse,
     ApprovalCreate,
     ApprovalResponse,
     ClearanceCreate,
     ClearanceResponse,
+    EmployeeCreate,
+    EmployeeResponse,
     ExitInterviewCreate,
     ExitInterviewResponse,
+    ExitRequestCreate,
+    ExitRequestResponse,
     LoginRequest,
     LoginResponse,
 )
-
-from models import (
-    User,
-    Employee,
-    ExitRequest,
-    Approval,
-    Clearance,
-    ExitInterview,
-    AuditLog,
-)
-
 
 pwd_context = CryptContext(
     schemes=["bcrypt"],
