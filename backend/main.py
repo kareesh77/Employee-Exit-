@@ -1,16 +1,14 @@
 import os
+from datetime import datetime, timedelta, timezone
 
 from dotenv import load_dotenv
 from jose import jwt
 from passlib.context import CryptContext
 
-load_dotenv()
-
-from datetime import datetime, timedelta, timezone
-
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -39,6 +37,8 @@ from schemas import (
     LoginResponse,
 )
 
+load_dotenv()
+
 pwd_context = CryptContext(
     schemes=["bcrypt"],
     deprecated="auto",
@@ -48,13 +48,13 @@ SECRET_KEY = os.getenv("SECRET_KEY")
 
 ALGORITHM = os.getenv(
     "ALGORITHM",
-    "HS256"
+    "HS256",
 )
 
 ACCESS_TOKEN_EXPIRE_MINUTES = int(
     os.getenv(
         "ACCESS_TOKEN_EXPIRE_MINUTES",
-        "60"
+        "60",
     )
 )
 
@@ -75,13 +75,13 @@ def create_access_token(user_id: int, role: str):
     return jwt.encode(
         payload,
         SECRET_KEY,
-        algorithm=ALGORITHM
+        algorithm=ALGORITHM,
     )
 
 
 def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     token = credentials.credentials
 
@@ -89,7 +89,7 @@ def get_current_user(
         payload = jwt.decode(
             token,
             SECRET_KEY,
-            algorithms=[ALGORITHM]
+            algorithms=[ALGORITHM],
         )
 
         user_id = payload.get("user_id")
@@ -97,13 +97,13 @@ def get_current_user(
         if user_id is None:
             raise HTTPException(
                 status_code=401,
-                detail="Invalid token"
+                detail="Invalid token",
             )
 
     except Exception:
         raise HTTPException(
             status_code=401,
-            detail="Invalid or expired token"
+            detail="Invalid or expired token",
         )
 
     user = (
@@ -115,7 +115,7 @@ def get_current_user(
     if not user:
         raise HTTPException(
             status_code=401,
-            detail="User not found"
+            detail="User not found",
         )
 
     return user
@@ -130,7 +130,7 @@ app = FastAPI(
 
 FRONTEND_URL = os.getenv(
     "FRONTEND_URL",
-    "http://localhost:5173"
+    "http://localhost:5173",
 )
 
 app.add_middleware(
@@ -179,7 +179,7 @@ def health_check():
 
 @app.get("/db-test")
 def database_test(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     result = db.execute(
         text("SELECT 1")
@@ -187,17 +187,17 @@ def database_test(
 
     return {
         "database": "connected",
-        "test": result
+        "test": result,
     }
 
 
 @app.post(
     "/employees",
-    response_model=EmployeeResponse
+    response_model=EmployeeResponse,
 )
 def create_employee(
     employee: EmployeeCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     new_employee = Employee(
         user_id=employee.user_id,
@@ -229,21 +229,21 @@ def create_employee(
 
 @app.get(
     "/employees",
-    response_model=list[EmployeeResponse]
+    response_model=list[EmployeeResponse],
 )
 def get_employees(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     return db.query(Employee).all()
 
 
 @app.post(
     "/exit-requests",
-    response_model=ExitRequestResponse
+    response_model=ExitRequestResponse,
 )
 def create_exit_request(
     exit_request: ExitRequestCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     new_exit_request = ExitRequest(
         employee_id=exit_request.employee_id,
@@ -272,25 +272,27 @@ def create_exit_request(
 
 @app.get(
     "/exit-requests",
-    response_model=list[ExitRequestResponse]
+    response_model=list[ExitRequestResponse],
 )
 def get_exit_requests(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     return db.query(ExitRequest).all()
 
 
-@app.put("/exit-requests/{exit_request_id}/status")
+@app.put(
+    "/exit-requests/{exit_request_id}/status"
+)
 def update_exit_request_status(
     exit_request_id: int,
     status: str,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     if current_user.role not in ["admin", "hr"]:
         raise HTTPException(
             status_code=403,
-            detail="Only HR administrators can update exit requests"
+            detail="Only HR administrators can update exit requests",
         )
 
     exit_request = (
@@ -302,13 +304,13 @@ def update_exit_request_status(
     if not exit_request:
         raise HTTPException(
             status_code=404,
-            detail="Exit request not found"
+            detail="Exit request not found",
         )
 
     if status not in ["approved", "rejected"]:
         raise HTTPException(
             status_code=400,
-            detail="Status must be approved or rejected"
+            detail="Status must be approved or rejected",
         )
 
     exit_request.status = status
@@ -330,8 +332,9 @@ def update_exit_request_status(
             exit_request_id=exit_request.id,
             approved_by=current_user.id,
             status=status,
-            comments=f"Exit request {status} by HR"
+            comments=f"Exit request {status} by HR",
         )
+
         db.add(approval)
 
     create_audit_log(
@@ -348,17 +351,17 @@ def update_exit_request_status(
     return {
         "message": f"Exit request {status} successfully",
         "id": exit_request.id,
-        "status": exit_request.status
+        "status": exit_request.status,
     }
 
 
 @app.post(
     "/approvals",
-    response_model=ApprovalResponse
+    response_model=ApprovalResponse,
 )
 def create_approval(
     approval: ApprovalCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     new_approval = Approval(
         exit_request_id=approval.exit_request_id,
@@ -386,21 +389,21 @@ def create_approval(
 
 @app.get(
     "/approvals",
-    response_model=list[ApprovalResponse]
+    response_model=list[ApprovalResponse],
 )
 def get_approvals(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     return db.query(Approval).all()
 
 
 @app.post(
     "/clearances",
-    response_model=ClearanceResponse
+    response_model=ClearanceResponse,
 )
 def create_clearance(
     clearance: ClearanceCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     new_clearance = Clearance(
         exit_request_id=clearance.exit_request_id,
@@ -427,25 +430,27 @@ def create_clearance(
 
 @app.get(
     "/clearances",
-    response_model=list[ClearanceResponse]
+    response_model=list[ClearanceResponse],
 )
 def get_clearances(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     return db.query(Clearance).all()
 
 
-@app.put("/clearances/{clearance_id}/status")
+@app.put(
+    "/clearances/{clearance_id}/status"
+)
 def update_clearance_status(
     clearance_id: int,
     status: str,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     if current_user.role not in ["admin", "hr"]:
         raise HTTPException(
             status_code=403,
-            detail="Only HR administrators can approve clearances"
+            detail="Only HR administrators can approve clearances",
         )
 
     clearance = (
@@ -457,13 +462,13 @@ def update_clearance_status(
     if not clearance:
         raise HTTPException(
             status_code=404,
-            detail="Clearance not found"
+            detail="Clearance not found",
         )
 
     if status not in ["approved", "rejected"]:
         raise HTTPException(
             status_code=400,
-            detail="Status must be approved or rejected"
+            detail="Status must be approved or rejected",
         )
 
     clearance.status = status
@@ -483,18 +488,40 @@ def update_clearance_status(
     return {
         "message": f"Clearance {status} successfully",
         "id": clearance.id,
-        "status": clearance.status
+        "status": clearance.status,
     }
+
+
+@app.get(
+    "/exit-interviews",
+    response_model=list[ExitInterviewResponse],
+)
+def get_my_exit_interviews(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    interviews = (
+        db.query(ExitInterview)
+        .filter(
+            ExitInterview.user_id == current_user.id
+        )
+        .order_by(
+            ExitInterview.id.desc()
+        )
+        .all()
+    )
+
+    return interviews
 
 
 @app.post(
     "/exit-interviews",
-    response_model=ExitInterviewResponse
+    response_model=ExitInterviewResponse,
 )
 def create_exit_interview(
     interview: ExitInterviewCreate,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     new_interview = ExitInterview(
         exit_request_id=interview.exit_request_id,
@@ -523,11 +550,11 @@ def create_exit_interview(
 
 @app.post(
     "/login",
-    response_model=LoginResponse
+    response_model=LoginResponse,
 )
 def login(
     login_data: LoginRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     user = (
         db.query(User)
@@ -571,7 +598,7 @@ def login(
 
     access_token = create_access_token(
         user_id=user.id,
-        role=user.role
+        role=user.role,
     )
 
     return {
@@ -579,17 +606,19 @@ def login(
         "access_token": access_token,
         "user_id": user.id,
         "email": user.email,
-        "role": user.role
+        "role": user.role,
     }
 
 
 @app.get("/audit-logs")
 def get_audit_logs(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     logs = (
         db.query(AuditLog)
-        .order_by(AuditLog.id.desc())
+        .order_by(
+            AuditLog.id.desc()
+        )
         .all()
     )
 

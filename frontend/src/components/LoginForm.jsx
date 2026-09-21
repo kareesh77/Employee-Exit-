@@ -26,7 +26,7 @@ function LoginForm() {
       sessionStorage.setItem("userId", String(user.user_id));
       sessionStorage.setItem("userEmail", user.email);
       sessionStorage.setItem("userRole", user.role);
-      sessionStorage.setItem("accessToken", user.access_token);
+      sessionStorage.setItem("access_token", user.access_token);
 
 
       if (user.role === "admin" || user.role === "hr") {
