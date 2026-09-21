@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 from jose import jwt
 from passlib.context import CryptContext
 
-load_dotenv(r"C:\Users\victu\OneDrive\Documents\Employee-Exit-\.env")
+load_dotenv()
 
 from datetime import datetime, timedelta, timezone
 
