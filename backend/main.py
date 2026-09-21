@@ -487,11 +487,12 @@ def update_clearance_status(
 )
 def create_exit_interview(
     interview: ExitInterviewCreate,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     new_interview = ExitInterview(
         exit_request_id=interview.exit_request_id,
-        user_id=interview.user_id,
+        user_id=current_user.id,
         feedback=interview.feedback,
         reason_for_leaving=interview.reason_for_leaving,
         suggestions=interview.suggestions,
@@ -503,7 +504,7 @@ def create_exit_interview(
 
     create_audit_log(
         db=db,
-        user_id=interview.user_id,
+        user_id=current_user.id,
         action="Exit interview created",
         entity_type="ExitInterview",
         entity_id=new_interview.id,
@@ -512,16 +513,6 @@ def create_exit_interview(
     db.commit()
 
     return new_interview
-
-
-@app.get(
-    "/exit-interviews",
-    response_model=list[ExitInterviewResponse]
-)
-def get_exit_interviews(
-    db: Session = Depends(get_db)
-):
-    return db.query(ExitInterview).all()
 
 
 @app.post(
