@@ -33,6 +33,7 @@ from schemas import (
     ExitInterviewResponse,
     ExitRequestCreate,
     ExitRequestResponse,
+    HREmployeeCreate,
     LoginRequest,
     LoginResponse,
 )
@@ -181,15 +182,118 @@ def health_check():
 def database_test(
     db: Session = Depends(get_db),
 ):
-    result = db.execute(
-        text("SELECT 1")
-    ).scalar()
+    try:
+        result = db.execute(
+            text("SELECT 1")
+        ).scalar()
 
-    return {
-        "database": "connected",
-        "test": result,
-    }
+        return {
+            "database": "connected",
+            "test": result,
+        }
 
+    except Exception as e:
+        return {
+            "database": "connection failed",
+            "error": str(e),
+        }
+
+@app.post("/hr/employees")
+def create_employee_by_hr(
+    employee: HREmployeeCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role not in ["admin", "hr"]:
+        raise HTTPException(
+            status_code=403,
+            detail="Only HR administrators can create employees",
+        )
+
+    existing_user = (
+        db.query(User)
+        .filter(User.email == employee.email)
+        .first()
+    )
+
+    if existing_user:
+        raise HTTPException(
+            status_code=400,
+            detail="Email already registered",
+        )
+
+    existing_employee = (
+        db.query(Employee)
+        .filter(
+            Employee.employee_code
+            == employee.employee_code
+        )
+        .first()
+    )
+
+    if existing_employee:
+        raise HTTPException(
+            status_code=400,
+            detail="Employee code already exists",
+        )
+
+    try:
+        password_hash = pwd_context.hash(
+            employee.password
+        )
+
+        new_user = User(
+            email=employee.email,
+            password_hash=password_hash,
+            role="employee",
+            is_active=True,
+        )
+
+        db.add(new_user)
+        db.flush()
+
+        new_employee = Employee(
+            user_id=new_user.id,
+            employee_code=employee.employee_code,
+            first_name=employee.first_name,
+            last_name=employee.last_name,
+            phone=employee.phone,
+            department_id=employee.department_id,
+            designation=employee.designation,
+            joining_date=employee.joining_date,
+        )
+
+        db.add(new_employee)
+        db.flush()
+
+        create_audit_log(
+            db=db,
+            user_id=current_user.id,
+            action="Employee account created by HR",
+            entity_type="Employee",
+            entity_id=new_employee.id,
+        )
+
+        db.commit()
+
+        db.refresh(new_user)
+        db.refresh(new_employee)
+
+        return {
+            "message": "Employee account created successfully",
+            "user_id": new_user.id,
+            "employee_id": new_employee.id,
+            "email": new_user.email,
+            "employee_code": new_employee.employee_code,
+            "role": new_user.role,
+        }
+
+    except Exception:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to create employee account",
+        )
 
 @app.post(
     "/employees",
