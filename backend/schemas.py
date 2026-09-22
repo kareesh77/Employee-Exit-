@@ -13,6 +13,25 @@ class EmployeeCreate(BaseModel):
     designation: str
     joining_date: date
 
+class HREmployeeCreate(BaseModel):
+
+    email: str
+
+    password: str
+
+    employee_code: str
+
+    first_name: str
+
+    last_name: str
+
+    phone: str | None = None
+
+    department_id: int
+
+    designation: str
+
+    joining_date: date
 
 class EmployeeResponse(EmployeeCreate):
     id: int
@@ -33,6 +52,17 @@ class UserResponse(UserCreate):
 
     class Config:
         from_attributes = True
+
+class HREmployeeCreate(BaseModel):
+    email: str
+    password: str
+    employee_code: str
+    first_name: str
+    last_name: str
+    phone: str | None = None
+    department_id: int
+    designation: str
+    joining_date: date
 
 
 class DepartmentCreate(BaseModel):
