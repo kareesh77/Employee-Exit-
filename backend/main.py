@@ -195,6 +195,13 @@ def database_test(
     except Exception as e:
         return {
             "database": "connection failed",
+            "mysql_host": os.getenv("MYSQLHOST"),
+            "mysql_port": os.getenv("MYSQLPORT"),
+            "mysql_user": os.getenv("MYSQLUSER"),
+            "mysql_database": os.getenv("MYSQLDATABASE"),
+            "password_configured": bool(
+                os.getenv("MYSQLPASSWORD")
+            ),
             "error": str(e),
         }
 
