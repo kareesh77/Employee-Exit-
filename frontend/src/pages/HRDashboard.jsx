@@ -22,7 +22,6 @@ function HRDashboard() {
   const [clearanceError, setClearanceError] = useState("");
   const [exitInterviewError, setExitInterviewError] = useState("");
 
-  // Create New Employee
   const [newEmployee, setNewEmployee] = useState({
     email: "",
     password: "",
@@ -34,6 +33,9 @@ function HRDashboard() {
     designation: "",
     joining_date: "",
   });
+
+  const [showNewEmployeePassword, setShowNewEmployeePassword] =
+    useState(false);
 
   const [creatingEmployee, setCreatingEmployee] = useState(false);
   const [createEmployeeError, setCreateEmployeeError] = useState("");
@@ -141,7 +143,6 @@ function HRDashboard() {
     loadAuditLogs();
   }, []);
 
-  // CREATE NEW EMPLOYEE
   const createEmployee = async (event) => {
     event.preventDefault();
 
@@ -171,7 +172,6 @@ function HRDashboard() {
         `Employee account created successfully for ${response.data.email}.`
       );
 
-      // Clear form
       setNewEmployee({
         email: "",
         password: "",
@@ -184,11 +184,11 @@ function HRDashboard() {
         joining_date: "",
       });
 
-      // Refresh employees table
+      setShowNewEmployeePassword(false);
+
       const employeesResponse = await api.get("/employees");
       setEmployees(employeesResponse.data);
 
-      // Refresh audit logs
       const auditResponse = await api.get("/audit-logs");
       setAuditLogs(auditResponse.data);
     } catch (error) {
@@ -389,8 +389,6 @@ function HRDashboard() {
 
   return (
     <div className="container py-5">
-
-      {/* HEADER */}
       <div className="d-flex justify-content-between align-items-center mb-4">
         <div>
           <h1 className="mb-1">HR Dashboard</h1>
@@ -408,12 +406,10 @@ function HRDashboard() {
         </button>
       </div>
 
-      {/* LOGIN STATUS */}
       <div className="alert alert-success">
         You are logged in as an HR administrator.
       </div>
 
-      {/* CREATE NEW EMPLOYEE */}
       <div className="card shadow-sm mb-4">
         <div className="card-header">
           <h2 className="h5 mb-0">
@@ -422,7 +418,6 @@ function HRDashboard() {
         </div>
 
         <div className="card-body">
-
           <p className="text-muted">
             HR can create an employee account here. The employee
             can later use this email and password on the normal
@@ -442,10 +437,7 @@ function HRDashboard() {
           )}
 
           <form onSubmit={createEmployee}>
-
             <div className="row">
-
-              {/* EMAIL */}
               <div className="col-md-6 mb-3">
                 <label
                   htmlFor="employeeEmail"
@@ -466,7 +458,6 @@ function HRDashboard() {
                 />
               </div>
 
-              {/* PASSWORD */}
               <div className="col-md-6 mb-3">
                 <label
                   htmlFor="employeePassword"
@@ -475,20 +466,39 @@ function HRDashboard() {
                   Password
                 </label>
 
-                <input
-                  id="employeePassword"
-                  name="password"
-                  type="password"
-                  className="form-control"
-                  value={newEmployee.password}
-                  onChange={handleNewEmployeeChange}
-                  placeholder="Enter temporary password"
-                  minLength="6"
-                  required
-                />
+                <div className="input-group">
+                  <input
+                    id="employeePassword"
+                    name="password"
+                    type={
+                      showNewEmployeePassword
+                        ? "text"
+                        : "password"
+                    }
+                    className="form-control"
+                    value={newEmployee.password}
+                    onChange={handleNewEmployeeChange}
+                    placeholder="Enter temporary password"
+                    minLength="6"
+                    required
+                  />
+
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary"
+                    onClick={() =>
+                      setShowNewEmployeePassword(
+                        (previous) => !previous
+                      )
+                    }
+                  >
+                    {showNewEmployeePassword
+                      ? "Hide"
+                      : "Show"}
+                  </button>
+                </div>
               </div>
 
-              {/* EMPLOYEE CODE */}
               <div className="col-md-6 mb-3">
                 <label
                   htmlFor="employeeCode"
@@ -509,7 +519,6 @@ function HRDashboard() {
                 />
               </div>
 
-              {/* FIRST NAME */}
               <div className="col-md-6 mb-3">
                 <label
                   htmlFor="firstName"
@@ -530,7 +539,6 @@ function HRDashboard() {
                 />
               </div>
 
-              {/* LAST NAME */}
               <div className="col-md-6 mb-3">
                 <label
                   htmlFor="lastName"
@@ -551,7 +559,6 @@ function HRDashboard() {
                 />
               </div>
 
-              {/* PHONE */}
               <div className="col-md-6 mb-3">
                 <label
                   htmlFor="phone"
@@ -571,7 +578,6 @@ function HRDashboard() {
                 />
               </div>
 
-              {/* DEPARTMENT ID */}
               <div className="col-md-6 mb-3">
                 <label
                   htmlFor="departmentId"
@@ -593,7 +599,6 @@ function HRDashboard() {
                 />
               </div>
 
-              {/* DESIGNATION */}
               <div className="col-md-6 mb-3">
                 <label
                   htmlFor="designation"
@@ -614,7 +619,6 @@ function HRDashboard() {
                 />
               </div>
 
-              {/* JOINING DATE */}
               <div className="col-md-6 mb-3">
                 <label
                   htmlFor="joiningDate"
@@ -633,7 +637,6 @@ function HRDashboard() {
                   required
                 />
               </div>
-
             </div>
 
             <button
@@ -645,12 +648,10 @@ function HRDashboard() {
                 ? "Creating Employee..."
                 : "Create Employee"}
             </button>
-
           </form>
         </div>
       </div>
 
-      {/* EMPLOYEES */}
       <div className="card shadow-sm mb-4">
         <div className="card-header">
           <h2 className="h5 mb-0">Employees</h2>
@@ -716,7 +717,6 @@ function HRDashboard() {
         </div>
       </div>
 
-      {/* EXIT REQUESTS */}
       <div className="card shadow-sm mb-4">
         <div className="card-header">
           <h2 className="h5 mb-0">Exit Requests</h2>
@@ -786,7 +786,6 @@ function HRDashboard() {
                         <td>
                           {request.status === "pending" ? (
                             <div className="d-flex gap-2">
-
                               <button
                                 type="button"
                                 className="btn btn-success btn-sm"
@@ -812,7 +811,6 @@ function HRDashboard() {
                               >
                                 Reject
                               </button>
-
                             </div>
                           ) : (
                             <span className="text-muted">
@@ -829,7 +827,6 @@ function HRDashboard() {
         </div>
       </div>
 
-      {/* APPROVALS */}
       <div className="card shadow-sm mb-4">
         <div className="card-header">
           <h2 className="h5 mb-0">Approvals</h2>
@@ -906,7 +903,6 @@ function HRDashboard() {
         </div>
       </div>
 
-      {/* CLEARANCES */}
       <div className="card shadow-sm mb-4">
         <div className="card-header">
           <h2 className="h5 mb-0">Clearances</h2>
@@ -975,7 +971,6 @@ function HRDashboard() {
                         <td>
                           {clearance.status === "pending" ? (
                             <div className="d-flex gap-2">
-
                               <button
                                 type="button"
                                 className="btn btn-success btn-sm"
@@ -1001,7 +996,6 @@ function HRDashboard() {
                               >
                                 Reject
                               </button>
-
                             </div>
                           ) : (
                             <span className="text-muted">
@@ -1018,7 +1012,6 @@ function HRDashboard() {
         </div>
       </div>
 
-      {/* CREATE EXIT INTERVIEW */}
       <div className="card shadow-sm mb-4">
         <div className="card-header">
           <h2 className="h5 mb-0">
@@ -1027,7 +1020,6 @@ function HRDashboard() {
         </div>
 
         <div className="card-body">
-
           {exitInterviewError && (
             <div className="alert alert-danger">
               {exitInterviewError}
@@ -1035,7 +1027,6 @@ function HRDashboard() {
           )}
 
           <form onSubmit={createExitInterview}>
-
             <div className="mb-3">
               <label
                 htmlFor="exitRequest"
@@ -1144,12 +1135,10 @@ function HRDashboard() {
                 ? "Creating..."
                 : "Create Exit Interview"}
             </button>
-
           </form>
         </div>
       </div>
 
-      {/* EXIT INTERVIEWS */}
       <div className="card shadow-sm mb-4">
         <div className="card-header">
           <h2 className="h5 mb-0">
@@ -1158,7 +1147,6 @@ function HRDashboard() {
         </div>
 
         <div className="card-body">
-
           {loadingExitInterviews && (
             <p className="text-muted">
               Loading exit interviews...
@@ -1183,9 +1171,7 @@ function HRDashboard() {
             !exitInterviewError &&
             exitInterviews.length > 0 && (
               <div className="table-responsive">
-
                 <table className="table table-bordered table-hover">
-
                   <thead>
                     <tr>
                       <th>ID</th>
@@ -1199,7 +1185,6 @@ function HRDashboard() {
                   <tbody>
                     {exitInterviews.map((interview) => (
                       <tr key={interview.id}>
-
                         <td>{interview.id}</td>
 
                         <td>
@@ -1217,27 +1202,21 @@ function HRDashboard() {
                         <td>
                           {interview.suggestions || "-"}
                         </td>
-
                       </tr>
                     ))}
                   </tbody>
-
                 </table>
-
               </div>
             )}
-
         </div>
       </div>
 
-      {/* AUDIT LOGS */}
       <div className="card shadow-sm mb-4">
         <div className="card-header">
           <h2 className="h5 mb-0">Audit Logs</h2>
         </div>
 
         <div className="card-body">
-
           {auditLogError && (
             <div className="alert alert-danger">
               {auditLogError}
@@ -1252,9 +1231,7 @@ function HRDashboard() {
 
           {!auditLogError && auditLogs.length > 0 && (
             <div className="table-responsive">
-
               <table className="table table-bordered table-hover">
-
                 <thead>
                   <tr>
                     <th>ID</th>
@@ -1276,16 +1253,13 @@ function HRDashboard() {
                     </tr>
                   ))}
                 </tbody>
-
               </table>
-
             </div>
           )}
-
         </div>
       </div>
-
     </div>
   );
 }
+
 export default HRDashboard;
