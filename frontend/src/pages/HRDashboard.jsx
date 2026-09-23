@@ -22,6 +22,23 @@ function HRDashboard() {
   const [clearanceError, setClearanceError] = useState("");
   const [exitInterviewError, setExitInterviewError] = useState("");
 
+  // Create New Employee
+  const [newEmployee, setNewEmployee] = useState({
+    email: "",
+    password: "",
+    employee_code: "",
+    first_name: "",
+    last_name: "",
+    phone: "",
+    department_id: "",
+    designation: "",
+    joining_date: "",
+  });
+
+  const [creatingEmployee, setCreatingEmployee] = useState(false);
+  const [createEmployeeError, setCreateEmployeeError] = useState("");
+  const [createEmployeeSuccess, setCreateEmployeeSuccess] = useState("");
+
   const [selectedExitRequest, setSelectedExitRequest] = useState("");
   const [feedback, setFeedback] = useState("");
   const [reasonForLeaving, setReasonForLeaving] = useState("");
@@ -124,11 +141,88 @@ function HRDashboard() {
     loadAuditLogs();
   }, []);
 
+  // CREATE NEW EMPLOYEE
+  const createEmployee = async (event) => {
+    event.preventDefault();
+
+    setCreateEmployeeError("");
+    setCreateEmployeeSuccess("");
+    setCreatingEmployee(true);
+
+    try {
+      const response = await api.post(
+        "/hr/employees",
+        {
+          email: newEmployee.email,
+          password: newEmployee.password,
+          employee_code: newEmployee.employee_code,
+          first_name: newEmployee.first_name,
+          last_name: newEmployee.last_name,
+          phone: newEmployee.phone,
+          department_id: Number(newEmployee.department_id),
+          designation: newEmployee.designation,
+          joining_date: newEmployee.joining_date,
+        }
+      );
+
+      console.log("Employee created:", response.data);
+
+      setCreateEmployeeSuccess(
+        `Employee account created successfully for ${response.data.email}.`
+      );
+
+      // Clear form
+      setNewEmployee({
+        email: "",
+        password: "",
+        employee_code: "",
+        first_name: "",
+        last_name: "",
+        phone: "",
+        department_id: "",
+        designation: "",
+        joining_date: "",
+      });
+
+      // Refresh employees table
+      const employeesResponse = await api.get("/employees");
+      setEmployees(employeesResponse.data);
+
+      // Refresh audit logs
+      const auditResponse = await api.get("/audit-logs");
+      setAuditLogs(auditResponse.data);
+    } catch (error) {
+      console.error("Failed to create employee:", error);
+      console.error("Response:", error.response?.data);
+
+      const detail = error.response?.data?.detail;
+
+      if (typeof detail === "string") {
+        setCreateEmployeeError(detail);
+      } else {
+        setCreateEmployeeError(
+          "Unable to create employee account."
+        );
+      }
+    } finally {
+      setCreatingEmployee(false);
+    }
+  };
+
+  const handleNewEmployeeChange = (event) => {
+    const { name, value } = event.target;
+
+    setNewEmployee((previous) => ({
+      ...previous,
+      [name]: value,
+    }));
+  };
+
   const updateRequestStatus = async (requestId, status) => {
     try {
       setExitRequestError("");
 
-      const token = sessionStorage.getItem("accessToken");
+      const token = sessionStorage.getItem("access_token");
 
       const response = await api.put(
         `/exit-requests/${requestId}/status`,
@@ -149,9 +243,9 @@ function HRDashboard() {
         previous.map((request) =>
           request.id === requestId
             ? {
-              ...request,
-              status: status,
-            }
+                ...request,
+                status: status,
+              }
             : request
         )
       );
@@ -159,10 +253,11 @@ function HRDashboard() {
       const approvalsResponse = await api.get("/approvals");
       setApprovals(approvalsResponse.data);
 
-      // Reload clearances because approval may automatically
-      // create a new clearance.
       const clearancesResponse = await api.get("/clearances");
       setClearances(clearancesResponse.data);
+
+      const auditResponse = await api.get("/audit-logs");
+      setAuditLogs(auditResponse.data);
     } catch (error) {
       console.error("Failed to update exit request:", error);
       console.error("Response:", error.response?.data);
@@ -181,7 +276,7 @@ function HRDashboard() {
     try {
       setClearanceError("");
 
-      const token = sessionStorage.getItem("accessToken");
+      const token = sessionStorage.getItem("access_token");
 
       const response = await api.put(
         `/clearances/${clearanceId}/status`,
@@ -202,13 +297,16 @@ function HRDashboard() {
         previous.map((clearance) =>
           clearance.id === clearanceId
             ? {
-              ...clearance,
-              status: status,
-              comments: `Clearance ${status} by HR`,
-            }
+                ...clearance,
+                status: status,
+                comments: `Clearance ${status} by HR`,
+              }
             : clearance
         )
       );
+
+      const auditResponse = await api.get("/audit-logs");
+      setAuditLogs(auditResponse.data);
     } catch (error) {
       console.error("Failed to update clearance:", error);
       console.error("Response:", error.response?.data);
@@ -235,7 +333,7 @@ function HRDashboard() {
       setCreatingInterview(true);
       setExitInterviewError("");
 
-      const token = sessionStorage.getItem("accessToken");
+      const token = sessionStorage.getItem("access_token");
 
       const response = await api.post(
         "/exit-interviews",
@@ -263,6 +361,9 @@ function HRDashboard() {
       setFeedback("");
       setReasonForLeaving("");
       setSuggestions("");
+
+      const auditResponse = await api.get("/audit-logs");
+      setAuditLogs(auditResponse.data);
     } catch (error) {
       console.error("Failed to create exit interview:", error);
       console.error("Response:", error.response?.data);
@@ -310,6 +411,243 @@ function HRDashboard() {
       {/* LOGIN STATUS */}
       <div className="alert alert-success">
         You are logged in as an HR administrator.
+      </div>
+
+      {/* CREATE NEW EMPLOYEE */}
+      <div className="card shadow-sm mb-4">
+        <div className="card-header">
+          <h2 className="h5 mb-0">
+            Create New Employee
+          </h2>
+        </div>
+
+        <div className="card-body">
+
+          <p className="text-muted">
+            HR can create an employee account here. The employee
+            can later use this email and password on the normal
+            login page.
+          </p>
+
+          {createEmployeeSuccess && (
+            <div className="alert alert-success">
+              {createEmployeeSuccess}
+            </div>
+          )}
+
+          {createEmployeeError && (
+            <div className="alert alert-danger">
+              {createEmployeeError}
+            </div>
+          )}
+
+          <form onSubmit={createEmployee}>
+
+            <div className="row">
+
+              {/* EMAIL */}
+              <div className="col-md-6 mb-3">
+                <label
+                  htmlFor="employeeEmail"
+                  className="form-label"
+                >
+                  Email
+                </label>
+
+                <input
+                  id="employeeEmail"
+                  name="email"
+                  type="email"
+                  className="form-control"
+                  value={newEmployee.email}
+                  onChange={handleNewEmployeeChange}
+                  placeholder="employee@example.com"
+                  required
+                />
+              </div>
+
+              {/* PASSWORD */}
+              <div className="col-md-6 mb-3">
+                <label
+                  htmlFor="employeePassword"
+                  className="form-label"
+                >
+                  Password
+                </label>
+
+                <input
+                  id="employeePassword"
+                  name="password"
+                  type="password"
+                  className="form-control"
+                  value={newEmployee.password}
+                  onChange={handleNewEmployeeChange}
+                  placeholder="Enter temporary password"
+                  minLength="6"
+                  required
+                />
+              </div>
+
+              {/* EMPLOYEE CODE */}
+              <div className="col-md-6 mb-3">
+                <label
+                  htmlFor="employeeCode"
+                  className="form-label"
+                >
+                  Employee Code
+                </label>
+
+                <input
+                  id="employeeCode"
+                  name="employee_code"
+                  type="text"
+                  className="form-control"
+                  value={newEmployee.employee_code}
+                  onChange={handleNewEmployeeChange}
+                  placeholder="EMP004"
+                  required
+                />
+              </div>
+
+              {/* FIRST NAME */}
+              <div className="col-md-6 mb-3">
+                <label
+                  htmlFor="firstName"
+                  className="form-label"
+                >
+                  First Name
+                </label>
+
+                <input
+                  id="firstName"
+                  name="first_name"
+                  type="text"
+                  className="form-control"
+                  value={newEmployee.first_name}
+                  onChange={handleNewEmployeeChange}
+                  placeholder="First name"
+                  required
+                />
+              </div>
+
+              {/* LAST NAME */}
+              <div className="col-md-6 mb-3">
+                <label
+                  htmlFor="lastName"
+                  className="form-label"
+                >
+                  Last Name
+                </label>
+
+                <input
+                  id="lastName"
+                  name="last_name"
+                  type="text"
+                  className="form-control"
+                  value={newEmployee.last_name}
+                  onChange={handleNewEmployeeChange}
+                  placeholder="Last name"
+                  required
+                />
+              </div>
+
+              {/* PHONE */}
+              <div className="col-md-6 mb-3">
+                <label
+                  htmlFor="phone"
+                  className="form-label"
+                >
+                  Phone
+                </label>
+
+                <input
+                  id="phone"
+                  name="phone"
+                  type="tel"
+                  className="form-control"
+                  value={newEmployee.phone}
+                  onChange={handleNewEmployeeChange}
+                  placeholder="9876543210"
+                />
+              </div>
+
+              {/* DEPARTMENT ID */}
+              <div className="col-md-6 mb-3">
+                <label
+                  htmlFor="departmentId"
+                  className="form-label"
+                >
+                  Department ID
+                </label>
+
+                <input
+                  id="departmentId"
+                  name="department_id"
+                  type="number"
+                  className="form-control"
+                  value={newEmployee.department_id}
+                  onChange={handleNewEmployeeChange}
+                  placeholder="1"
+                  min="1"
+                  required
+                />
+              </div>
+
+              {/* DESIGNATION */}
+              <div className="col-md-6 mb-3">
+                <label
+                  htmlFor="designation"
+                  className="form-label"
+                >
+                  Designation
+                </label>
+
+                <input
+                  id="designation"
+                  name="designation"
+                  type="text"
+                  className="form-control"
+                  value={newEmployee.designation}
+                  onChange={handleNewEmployeeChange}
+                  placeholder="Software Engineer"
+                  required
+                />
+              </div>
+
+              {/* JOINING DATE */}
+              <div className="col-md-6 mb-3">
+                <label
+                  htmlFor="joiningDate"
+                  className="form-label"
+                >
+                  Joining Date
+                </label>
+
+                <input
+                  id="joiningDate"
+                  name="joining_date"
+                  type="date"
+                  className="form-control"
+                  value={newEmployee.joining_date}
+                  onChange={handleNewEmployeeChange}
+                  required
+                />
+              </div>
+
+            </div>
+
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={creatingEmployee}
+            >
+              {creatingEmployee
+                ? "Creating Employee..."
+                : "Create Employee"}
+            </button>
+
+          </form>
+        </div>
       </div>
 
       {/* EMPLOYEES */}
@@ -433,12 +771,13 @@ function HRDashboard() {
 
                         <td>
                           <span
-                            className={`badge ${request.status === "approved"
-                              ? "bg-success"
-                              : request.status === "rejected"
-                                ? "bg-danger"
-                                : "bg-warning text-dark"
-                              }`}
+                            className={`badge ${
+                              request.status === "approved"
+                                ? "bg-success"
+                                : request.status === "rejected"
+                                  ? "bg-danger"
+                                  : "bg-warning text-dark"
+                            }`}
                           >
                             {request.status}
                           </span>
@@ -698,11 +1037,15 @@ function HRDashboard() {
           <form onSubmit={createExitInterview}>
 
             <div className="mb-3">
-              <label className="form-label">
+              <label
+                htmlFor="exitRequest"
+                className="form-label"
+              >
                 Exit Request
               </label>
 
               <select
+                id="exitRequest"
                 className="form-select"
                 value={selectedExitRequest}
                 onChange={(event) =>
@@ -733,11 +1076,15 @@ function HRDashboard() {
             </div>
 
             <div className="mb-3">
-              <label className="form-label">
+              <label
+                htmlFor="feedback"
+                className="form-label"
+              >
                 Feedback
               </label>
 
               <textarea
+                id="feedback"
                 className="form-control"
                 rows="3"
                 value={feedback}
@@ -749,11 +1096,15 @@ function HRDashboard() {
             </div>
 
             <div className="mb-3">
-              <label className="form-label">
+              <label
+                htmlFor="reasonForLeaving"
+                className="form-label"
+              >
                 Reason for Leaving
               </label>
 
               <textarea
+                id="reasonForLeaving"
                 className="form-control"
                 rows="3"
                 value={reasonForLeaving}
@@ -765,11 +1116,15 @@ function HRDashboard() {
             </div>
 
             <div className="mb-3">
-              <label className="form-label">
+              <label
+                htmlFor="suggestions"
+                className="form-label"
+              >
                 Suggestions
               </label>
 
               <textarea
+                id="suggestions"
                 className="form-control"
                 rows="3"
                 value={suggestions}
@@ -875,12 +1230,14 @@ function HRDashboard() {
         </div>
       </div>
 
+      {/* AUDIT LOGS */}
       <div className="card shadow-sm mb-4">
         <div className="card-header">
           <h2 className="h5 mb-0">Audit Logs</h2>
         </div>
 
         <div className="card-body">
+
           {auditLogError && (
             <div className="alert alert-danger">
               {auditLogError}
@@ -895,7 +1252,9 @@ function HRDashboard() {
 
           {!auditLogError && auditLogs.length > 0 && (
             <div className="table-responsive">
+
               <table className="table table-bordered table-hover">
+
                 <thead>
                   <tr>
                     <th>ID</th>
@@ -917,14 +1276,16 @@ function HRDashboard() {
                     </tr>
                   ))}
                 </tbody>
+
               </table>
+
             </div>
           )}
+
         </div>
       </div>
 
     </div>
   );
 }
-
 export default HRDashboard;
