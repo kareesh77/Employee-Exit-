@@ -547,6 +547,68 @@ def deactivate_employee_by_hr(
         "is_active": user.is_active,
     }
 
+@app.put("/hr/employees/{employee_id}/reactivate")
+def reactivate_employee_by_hr(
+    employee_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role not in ["admin", "hr"]:
+        raise HTTPException(
+            status_code=403,
+            detail="Only HR administrators can reactivate employees",
+        )
+
+    employee = (
+        db.query(Employee)
+        .filter(Employee.id == employee_id)
+        .first()
+    )
+
+    if not employee:
+        raise HTTPException(
+            status_code=404,
+            detail="Employee not found",
+        )
+
+    user = (
+        db.query(User)
+        .filter(User.id == employee.user_id)
+        .first()
+    )
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="Employee user account not found",
+        )
+
+    if user.is_active:
+        raise HTTPException(
+            status_code=400,
+            detail="Employee account is already active",
+        )
+
+    user.is_active = True
+
+    create_audit_log(
+        db=db,
+        user_id=current_user.id,
+        action="Employee account reactivated by HR",
+        entity_type="Employee",
+        entity_id=employee.id,
+    )
+
+    db.commit()
+    db.refresh(user)
+
+    return {
+        "message": "Employee account reactivated successfully",
+        "employee_id": employee.id,
+        "email": user.email,
+        "is_active": user.is_active,
+    }
+
 @app.post(
     "/employees",
     response_model=EmployeeResponse,
