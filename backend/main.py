@@ -5,7 +5,9 @@ from dotenv import load_dotenv
 from jose import jwt
 from passlib.context import CryptContext
 
-from fastapi import Depends, FastAPI, HTTPException, Header
+from fastapi import Depends, FastAPI, HTTPException
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+security = HTTPBearer()
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
@@ -90,16 +92,10 @@ def create_access_token(user_id: int, role: str):
 
 
 def get_current_user(
-    authorization: str = Header(...),
+    credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db)
 ):
-    if not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid authorization header"
-        )
-
-    token = authorization.split(" ", 1)[1]
+    token = credentials.credentials
 
     try:
         payload = jwt.decode(
