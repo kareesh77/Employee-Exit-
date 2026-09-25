@@ -1,11 +1,11 @@
 import os
-from datetime import datetime, timedelta, timezone
-
+from datetime import date, datetime, timedelta, timezone
+from pydantic import BaseModel
 from dotenv import load_dotenv
 from jose import jwt
 from passlib.context import CryptContext
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
@@ -60,6 +60,15 @@ ACCESS_TOKEN_EXPIRE_MINUTES = int(
 )
 
 security = HTTPBearer()
+class HREmployeeUpdate(BaseModel):
+    email: str | None = None
+    employee_code: str | None = None
+    first_name: str | None = None
+    last_name: str | None = None
+    phone: str | None = None
+    department_id: int | None = None
+    designation: str | None = None
+    joining_date: date | None = None
 
 
 def create_access_token(user_id: int, role: str):
@@ -81,16 +90,22 @@ def create_access_token(user_id: int, role: str):
 
 
 def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: Session = Depends(get_db),
+    authorization: str = Header(...),
+    db: Session = Depends(get_db)
 ):
-    token = credentials.credentials
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid authorization header"
+        )
+
+    token = authorization.split(" ", 1)[1]
 
     try:
         payload = jwt.decode(
             token,
             SECRET_KEY,
-            algorithms=[ALGORITHM],
+            algorithms=[ALGORITHM]
         )
 
         user_id = payload.get("user_id")
@@ -98,13 +113,16 @@ def get_current_user(
         if user_id is None:
             raise HTTPException(
                 status_code=401,
-                detail="Invalid token",
+                detail="Invalid token"
             )
+
+    except HTTPException:
+        raise
 
     except Exception:
         raise HTTPException(
             status_code=401,
-            detail="Invalid or expired token",
+            detail="Invalid or expired token"
         )
 
     user = (
@@ -116,7 +134,13 @@ def get_current_user(
     if not user:
         raise HTTPException(
             status_code=401,
-            detail="User not found",
+            detail="User not found"
+        )
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=403,
+            detail="User account is inactive"
         )
 
     return user
@@ -302,6 +326,230 @@ def create_employee_by_hr(
             status_code=500,
             detail="Unable to create employee account",
         )
+
+@app.get("/hr/employees")
+def get_hr_employees(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role not in ["admin", "hr"]:
+        raise HTTPException(
+            status_code=403,
+            detail="Only HR administrators can view employees",
+        )
+
+    employees = (
+        db.query(Employee)
+        .order_by(Employee.id.asc())
+        .all()
+    )
+
+    result = []
+
+    for employee in employees:
+        user = (
+            db.query(User)
+            .filter(User.id == employee.user_id)
+            .first()
+        )
+
+        result.append(
+            {
+                "id": employee.id,
+                "user_id": employee.user_id,
+                "email": user.email if user else None,
+                "is_active": user.is_active if user else False,
+                "employee_code": employee.employee_code,
+                "first_name": employee.first_name,
+                "last_name": employee.last_name,
+                "phone": employee.phone,
+                "department_id": employee.department_id,
+                "designation": employee.designation,
+                "joining_date": employee.joining_date,
+            }
+        )
+
+    return result
+
+
+@app.put("/hr/employees/{employee_id}")
+def update_employee_by_hr(
+    employee_id: int,
+    employee_data: HREmployeeUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role not in ["admin", "hr"]:
+        raise HTTPException(
+            status_code=403,
+            detail="Only HR administrators can edit employees",
+        )
+
+    employee = (
+        db.query(Employee)
+        .filter(Employee.id == employee_id)
+        .first()
+    )
+
+    if not employee:
+        raise HTTPException(
+            status_code=404,
+            detail="Employee not found",
+        )
+
+    user = (
+        db.query(User)
+        .filter(User.id == employee.user_id)
+        .first()
+    )
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="Employee user account not found",
+        )
+
+    if employee_data.email is not None:
+        existing_user = (
+            db.query(User)
+            .filter(
+                User.email == employee_data.email,
+                User.id != user.id,
+            )
+            .first()
+        )
+
+        if existing_user:
+            raise HTTPException(
+                status_code=400,
+                detail="Email already registered",
+            )
+
+        user.email = employee_data.email
+
+    if employee_data.employee_code is not None:
+        existing_employee = (
+            db.query(Employee)
+            .filter(
+                Employee.employee_code == employee_data.employee_code,
+                Employee.id != employee.id,
+            )
+            .first()
+        )
+
+        if existing_employee:
+            raise HTTPException(
+                status_code=400,
+                detail="Employee code already exists",
+            )
+
+        employee.employee_code = employee_data.employee_code
+
+    if employee_data.first_name is not None:
+        employee.first_name = employee_data.first_name
+
+    if employee_data.last_name is not None:
+        employee.last_name = employee_data.last_name
+
+    if employee_data.phone is not None:
+        employee.phone = employee_data.phone
+
+    if employee_data.department_id is not None:
+        employee.department_id = employee_data.department_id
+
+    if employee_data.designation is not None:
+        employee.designation = employee_data.designation
+
+    if employee_data.joining_date is not None:
+        employee.joining_date = employee_data.joining_date
+
+    create_audit_log(
+        db=db,
+        user_id=current_user.id,
+        action="Employee details updated by HR",
+        entity_type="Employee",
+        entity_id=employee.id,
+    )
+
+    db.commit()
+    db.refresh(employee)
+    db.refresh(user)
+
+    return {
+        "message": "Employee details updated successfully",
+        "employee_id": employee.id,
+        "email": user.email,
+        "employee_code": employee.employee_code,
+        "first_name": employee.first_name,
+        "last_name": employee.last_name,
+        "phone": employee.phone,
+        "department_id": employee.department_id,
+        "designation": employee.designation,
+        "joining_date": employee.joining_date,
+        "is_active": user.is_active,
+    }
+
+@app.put("/hr/employees/{employee_id}/deactivate")
+def deactivate_employee_by_hr(
+    employee_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role not in ["admin", "hr"]:
+        raise HTTPException(
+            status_code=403,
+            detail="Only HR administrators can deactivate employees",
+        )
+
+    employee = (
+        db.query(Employee)
+        .filter(Employee.id == employee_id)
+        .first()
+    )
+
+    if not employee:
+        raise HTTPException(
+            status_code=404,
+            detail="Employee not found",
+        )
+
+    user = (
+        db.query(User)
+        .filter(User.id == employee.user_id)
+        .first()
+    )
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="Employee user account not found",
+        )
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=400,
+            detail="Employee account is already inactive",
+        )
+
+    user.is_active = False
+
+    create_audit_log(
+        db=db,
+        user_id=current_user.id,
+        action="Employee account deactivated by HR",
+        entity_type="Employee",
+        entity_id=employee.id,
+    )
+
+    db.commit()
+    db.refresh(user)
+
+    return {
+        "message": "Employee account deactivated successfully",
+        "employee_id": employee.id,
+        "email": user.email,
+        "is_active": user.is_active,
+    }
 
 @app.post(
     "/employees",
