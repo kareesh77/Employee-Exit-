@@ -41,6 +41,13 @@ function HRDashboard() {
   const [createEmployeeError, setCreateEmployeeError] = useState("");
   const [createEmployeeSuccess, setCreateEmployeeSuccess] = useState("");
 
+  const [selectedEmployee, setSelectedEmployee] = useState(null);
+  const [viewingEmployee, setViewingEmployee] = useState(null);
+  const [editingEmployee, setEditingEmployee] = useState(null);
+  const [employeeActionError, setEmployeeActionError] = useState("");
+  const [employeeActionSuccess, setEmployeeActionSuccess] = useState("");
+  const [savingEmployee, setSavingEmployee] = useState(false);
+
   const [selectedExitRequest, setSelectedExitRequest] = useState("");
   const [feedback, setFeedback] = useState("");
   const [reasonForLeaving, setReasonForLeaving] = useState("");
@@ -52,7 +59,7 @@ function HRDashboard() {
   useEffect(() => {
     const loadEmployees = async () => {
       try {
-        const response = await api.get("/employees");
+        const response = await api.get("/hr/employees");
         setEmployees(response.data);
       } catch (error) {
         console.error("Failed to load employees:", error);
@@ -143,6 +150,26 @@ function HRDashboard() {
     loadAuditLogs();
   }, []);
 
+  const refreshEmployees = async () => {
+    try {
+      const response = await api.get("/hr/employees");
+      setEmployees(response.data);
+    } catch (error) {
+      console.error("Failed to refresh employees:", error);
+      setEmployeeError("Unable to refresh employees.");
+    }
+  };
+
+  const refreshAuditLogs = async () => {
+    try {
+      const response = await api.get("/audit-logs");
+      setAuditLogs(response.data);
+    } catch (error) {
+      console.error("Failed to refresh audit logs:", error);
+      setAuditLogError("Unable to refresh audit logs.");
+    }
+  };
+
   const createEmployee = async (event) => {
     event.preventDefault();
 
@@ -166,8 +193,6 @@ function HRDashboard() {
         }
       );
 
-      console.log("Employee created:", response.data);
-
       setCreateEmployeeSuccess(
         `Employee account created successfully for ${response.data.email}.`
       );
@@ -186,11 +211,8 @@ function HRDashboard() {
 
       setShowNewEmployeePassword(false);
 
-      const employeesResponse = await api.get("/employees");
-      setEmployees(employeesResponse.data);
-
-      const auditResponse = await api.get("/audit-logs");
-      setAuditLogs(auditResponse.data);
+      await refreshEmployees();
+      await refreshAuditLogs();
     } catch (error) {
       console.error("Failed to create employee:", error);
       console.error("Response:", error.response?.data);
@@ -218,6 +240,164 @@ function HRDashboard() {
     }));
   };
 
+  const openViewEmployee = (employee) => {
+    setEmployeeActionError("");
+    setViewingEmployee(employee);
+  };
+
+  const openEditEmployee = (employee) => {
+    setEmployeeActionError("");
+    setEmployeeActionSuccess("");
+    setEditingEmployee({
+      id: employee.id,
+      email: employee.email || "",
+      employee_code: employee.employee_code || "",
+      first_name: employee.first_name || "",
+      last_name: employee.last_name || "",
+      phone: employee.phone || "",
+      department_id: employee.department_id ?? "",
+      designation: employee.designation || "",
+      joining_date: employee.joining_date || "",
+    });
+  };
+
+  const handleEditEmployeeChange = (event) => {
+    const { name, value } = event.target;
+
+    setEditingEmployee((previous) => ({
+      ...previous,
+      [name]: value,
+    }));
+  };
+
+  const saveEmployeeEdit = async (event) => {
+    event.preventDefault();
+
+    if (!editingEmployee) {
+      return;
+    }
+
+    setSavingEmployee(true);
+    setEmployeeActionError("");
+    setEmployeeActionSuccess("");
+
+    try {
+      const response = await api.put(
+        `/hr/employees/${editingEmployee.id}`,
+        {
+          email: editingEmployee.email,
+          employee_code: editingEmployee.employee_code,
+          first_name: editingEmployee.first_name,
+          last_name: editingEmployee.last_name,
+          phone: editingEmployee.phone,
+          department_id: Number(editingEmployee.department_id),
+          designation: editingEmployee.designation,
+          joining_date: editingEmployee.joining_date,
+        }
+      );
+
+      setEmployeeActionSuccess(
+        response.data.message || "Employee updated successfully."
+      );
+
+      await refreshEmployees();
+      await refreshAuditLogs();
+
+      setEditingEmployee(null);
+    } catch (error) {
+      console.error("Failed to update employee:", error);
+      console.error("Response:", error.response?.data);
+
+      const detail = error.response?.data?.detail;
+
+      if (typeof detail === "string") {
+        setEmployeeActionError(detail);
+      } else {
+        setEmployeeActionError("Unable to update employee.");
+      }
+    } finally {
+      setSavingEmployee(false);
+    }
+  };
+
+  const deactivateEmployee = async (employee) => {
+    const confirmed = window.confirm(
+      `Are you sure you want to deactivate ${employee.first_name} ${employee.last_name}?`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setEmployeeActionError("");
+    setEmployeeActionSuccess("");
+
+    try {
+      const response = await api.put(
+        `/hr/employees/${employee.id}/deactivate`
+      );
+
+      setEmployeeActionSuccess(
+        response.data.message || "Employee account deactivated successfully."
+      );
+
+      await refreshEmployees();
+      await refreshAuditLogs();
+    } catch (error) {
+      console.error("Failed to deactivate employee:", error);
+      console.error("Response:", error.response?.data);
+
+      const detail = error.response?.data?.detail;
+
+      if (typeof detail === "string") {
+        setEmployeeActionError(detail);
+      } else {
+        setEmployeeActionError(
+          "Unable to deactivate employee account."
+        );
+      }
+    }
+  };
+
+  const reactivateEmployee = async (employee) => {
+    const confirmed = window.confirm(
+      `Are you sure you want to reactivate ${employee.first_name} ${employee.last_name}?`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setEmployeeActionError("");
+    setEmployeeActionSuccess("");
+
+    try {
+      const response = await api.put(
+        `/hr/employees/${employee.id}/reactivate`
+      );
+
+      setEmployeeActionSuccess(
+        response.data.message || "Employee account reactivated successfully."
+      );
+
+      await refreshEmployees();
+      await refreshAuditLogs();
+    } catch (error) {
+      console.error("Failed to reactivate employee:", error);
+      console.error("Response:", error.response?.data);
+
+      const detail = error.response?.data?.detail;
+
+      if (typeof detail === "string") {
+        setEmployeeActionError(detail);
+      } else {
+        setEmployeeActionError(
+          "Unable to reactivate employee account."
+        );
+      }
+    }
+  };
+
   const updateRequestStatus = async (requestId, status) => {
     try {
       setExitRequestError("");
@@ -237,8 +417,6 @@ function HRDashboard() {
         }
       );
 
-      console.log("Exit request updated:", response.data);
-
       setExitRequests((previous) =>
         previous.map((request) =>
           request.id === requestId
@@ -256,8 +434,9 @@ function HRDashboard() {
       const clearancesResponse = await api.get("/clearances");
       setClearances(clearancesResponse.data);
 
-      const auditResponse = await api.get("/audit-logs");
-      setAuditLogs(auditResponse.data);
+      await refreshAuditLogs();
+
+      console.log("Exit request updated:", response.data);
     } catch (error) {
       console.error("Failed to update exit request:", error);
       console.error("Response:", error.response?.data);
@@ -291,8 +470,6 @@ function HRDashboard() {
         }
       );
 
-      console.log("Clearance updated:", response.data);
-
       setClearances((previous) =>
         previous.map((clearance) =>
           clearance.id === clearanceId
@@ -305,8 +482,9 @@ function HRDashboard() {
         )
       );
 
-      const auditResponse = await api.get("/audit-logs");
-      setAuditLogs(auditResponse.data);
+      await refreshAuditLogs();
+
+      console.log("Clearance updated:", response.data);
     } catch (error) {
       console.error("Failed to update clearance:", error);
       console.error("Response:", error.response?.data);
@@ -350,8 +528,6 @@ function HRDashboard() {
         }
       );
 
-      console.log("Exit interview created:", response.data);
-
       setExitInterviews((previous) => [
         ...previous,
         response.data,
@@ -362,8 +538,9 @@ function HRDashboard() {
       setReasonForLeaving("");
       setSuggestions("");
 
-      const auditResponse = await api.get("/audit-logs");
-      setAuditLogs(auditResponse.data);
+      await refreshAuditLogs();
+
+      console.log("Exit interview created:", response.data);
     } catch (error) {
       console.error("Failed to create exit interview:", error);
       console.error("Response:", error.response?.data);
@@ -658,6 +835,18 @@ function HRDashboard() {
         </div>
 
         <div className="card-body">
+          {employeeActionSuccess && (
+            <div className="alert alert-success">
+              {employeeActionSuccess}
+            </div>
+          )}
+
+          {employeeActionError && (
+            <div className="alert alert-danger">
+              {employeeActionError}
+            </div>
+          )}
+
           {loadingEmployees && (
             <p className="text-muted">
               Loading employees...
@@ -682,7 +871,7 @@ function HRDashboard() {
             !employeeError &&
             employees.length > 0 && (
               <div className="table-responsive">
-                <table className="table table-bordered table-hover">
+                <table className="table table-bordered table-hover align-middle">
                   <thead>
                     <tr>
                       <th>ID</th>
@@ -692,6 +881,8 @@ function HRDashboard() {
                       <th>Department ID</th>
                       <th>Designation</th>
                       <th>Joining Date</th>
+                      <th>Status</th>
+                      <th>Actions</th>
                     </tr>
                   </thead>
 
@@ -708,6 +899,64 @@ function HRDashboard() {
                         <td>{employee.department_id}</td>
                         <td>{employee.designation}</td>
                         <td>{employee.joining_date}</td>
+
+                        <td>
+                          {employee.is_active ? (
+                            <span className="badge bg-success">
+                              Active
+                            </span>
+                          ) : (
+                            <span className="badge bg-danger">
+                              Inactive
+                            </span>
+                          )}
+                        </td>
+
+                        <td>
+                          <div className="d-flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              className="btn btn-info btn-sm text-white"
+                              onClick={() =>
+                                openViewEmployee(employee)
+                              }
+                            >
+                              View
+                            </button>
+
+                            <button
+                              type="button"
+                              className="btn btn-primary btn-sm"
+                              onClick={() =>
+                                openEditEmployee(employee)
+                              }
+                            >
+                              Edit
+                            </button>
+
+                            {employee.is_active ? (
+                              <button
+                                type="button"
+                                className="btn btn-danger btn-sm"
+                                onClick={() =>
+                                  deactivateEmployee(employee)
+                                }
+                              >
+                                Deactivate
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                className="btn btn-success btn-sm"
+                                onClick={() =>
+                                  reactivateEmployee(employee)
+                                }
+                              >
+                                Reactivate
+                              </button>
+                            )}
+                          </div>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -716,6 +965,321 @@ function HRDashboard() {
             )}
         </div>
       </div>
+
+      {viewingEmployee && (
+        <div
+          className="modal d-block"
+          tabIndex="-1"
+          style={{ backgroundColor: "rgba(0, 0, 0, 0.5)" }}
+        >
+          <div className="modal-dialog modal-lg modal-dialog-centered">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">
+                  Employee Details
+                </h5>
+
+                <button
+                  type="button"
+                  className="btn-close"
+                  onClick={() => setViewingEmployee(null)}
+                ></button>
+              </div>
+
+              <div className="modal-body">
+                <div className="row">
+                  <div className="col-md-6 mb-3">
+                    <strong>Employee ID</strong>
+                    <div>{viewingEmployee.id}</div>
+                  </div>
+
+                  <div className="col-md-6 mb-3">
+                    <strong>User ID</strong>
+                    <div>{viewingEmployee.user_id}</div>
+                  </div>
+
+                  <div className="col-md-6 mb-3">
+                    <strong>Email</strong>
+                    <div>{viewingEmployee.email}</div>
+                  </div>
+
+                  <div className="col-md-6 mb-3">
+                    <strong>Employee Code</strong>
+                    <div>
+                      {viewingEmployee.employee_code}
+                    </div>
+                  </div>
+
+                  <div className="col-md-6 mb-3">
+                    <strong>First Name</strong>
+                    <div>{viewingEmployee.first_name}</div>
+                  </div>
+
+                  <div className="col-md-6 mb-3">
+                    <strong>Last Name</strong>
+                    <div>{viewingEmployee.last_name}</div>
+                  </div>
+
+                  <div className="col-md-6 mb-3">
+                    <strong>Phone</strong>
+                    <div>
+                      {viewingEmployee.phone || "-"}
+                    </div>
+                  </div>
+
+                  <div className="col-md-6 mb-3">
+                    <strong>Department ID</strong>
+                    <div>
+                      {viewingEmployee.department_id}
+                    </div>
+                  </div>
+
+                  <div className="col-md-6 mb-3">
+                    <strong>Designation</strong>
+                    <div>
+                      {viewingEmployee.designation}
+                    </div>
+                  </div>
+
+                  <div className="col-md-6 mb-3">
+                    <strong>Joining Date</strong>
+                    <div>
+                      {viewingEmployee.joining_date}
+                    </div>
+                  </div>
+
+                  <div className="col-md-6 mb-3">
+                    <strong>Status</strong>
+                    <div>
+                      {viewingEmployee.is_active ? (
+                        <span className="badge bg-success">
+                          Active
+                        </span>
+                      ) : (
+                        <span className="badge bg-danger">
+                          Inactive
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setViewingEmployee(null)}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editingEmployee && (
+        <div
+          className="modal d-block"
+          tabIndex="-1"
+          style={{ backgroundColor: "rgba(0, 0, 0, 0.5)" }}
+        >
+          <div className="modal-dialog modal-lg modal-dialog-centered">
+            <div className="modal-content">
+              <form onSubmit={saveEmployeeEdit}>
+                <div className="modal-header">
+                  <h5 className="modal-title">
+                    Edit Employee
+                  </h5>
+
+                  <button
+                    type="button"
+                    className="btn-close"
+                    onClick={() => setEditingEmployee(null)}
+                  ></button>
+                </div>
+
+                <div className="modal-body">
+                  <div className="row">
+                    <div className="col-md-6 mb-3">
+                      <label
+                        htmlFor="editEmployeeEmail"
+                        className="form-label"
+                      >
+                        Email
+                      </label>
+
+                      <input
+                        id="editEmployeeEmail"
+                        name="email"
+                        type="email"
+                        className="form-control"
+                        value={editingEmployee.email}
+                        onChange={handleEditEmployeeChange}
+                        required
+                      />
+                    </div>
+
+                    <div className="col-md-6 mb-3">
+                      <label
+                        htmlFor="editEmployeeCode"
+                        className="form-label"
+                      >
+                        Employee Code
+                      </label>
+
+                      <input
+                        id="editEmployeeCode"
+                        name="employee_code"
+                        type="text"
+                        className="form-control"
+                        value={editingEmployee.employee_code}
+                        onChange={handleEditEmployeeChange}
+                        required
+                      />
+                    </div>
+
+                    <div className="col-md-6 mb-3">
+                      <label
+                        htmlFor="editFirstName"
+                        className="form-label"
+                      >
+                        First Name
+                      </label>
+
+                      <input
+                        id="editFirstName"
+                        name="first_name"
+                        type="text"
+                        className="form-control"
+                        value={editingEmployee.first_name}
+                        onChange={handleEditEmployeeChange}
+                        required
+                      />
+                    </div>
+
+                    <div className="col-md-6 mb-3">
+                      <label
+                        htmlFor="editLastName"
+                        className="form-label"
+                      >
+                        Last Name
+                      </label>
+
+                      <input
+                        id="editLastName"
+                        name="last_name"
+                        type="text"
+                        className="form-control"
+                        value={editingEmployee.last_name}
+                        onChange={handleEditEmployeeChange}
+                        required
+                      />
+                    </div>
+
+                    <div className="col-md-6 mb-3">
+                      <label
+                        htmlFor="editPhone"
+                        className="form-label"
+                      >
+                        Phone
+                      </label>
+
+                      <input
+                        id="editPhone"
+                        name="phone"
+                        type="tel"
+                        className="form-control"
+                        value={editingEmployee.phone}
+                        onChange={handleEditEmployeeChange}
+                      />
+                    </div>
+
+                    <div className="col-md-6 mb-3">
+                      <label
+                        htmlFor="editDepartmentId"
+                        className="form-label"
+                      >
+                        Department ID
+                      </label>
+
+                      <input
+                        id="editDepartmentId"
+                        name="department_id"
+                        type="number"
+                        className="form-control"
+                        value={editingEmployee.department_id}
+                        onChange={handleEditEmployeeChange}
+                        min="1"
+                        required
+                      />
+                    </div>
+
+                    <div className="col-md-6 mb-3">
+                      <label
+                        htmlFor="editDesignation"
+                        className="form-label"
+                      >
+                        Designation
+                      </label>
+
+                      <input
+                        id="editDesignation"
+                        name="designation"
+                        type="text"
+                        className="form-control"
+                        value={editingEmployee.designation}
+                        onChange={handleEditEmployeeChange}
+                        required
+                      />
+                    </div>
+
+                    <div className="col-md-6 mb-3">
+                      <label
+                        htmlFor="editJoiningDate"
+                        className="form-label"
+                      >
+                        Joining Date
+                      </label>
+
+                      <input
+                        id="editJoiningDate"
+                        name="joining_date"
+                        type="date"
+                        className="form-control"
+                        value={editingEmployee.joining_date}
+                        onChange={handleEditEmployeeChange}
+                        required
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="modal-footer">
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => setEditingEmployee(null)}
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    type="submit"
+                    className="btn btn-primary"
+                    disabled={savingEmployee}
+                  >
+                    {savingEmployee
+                      ? "Saving..."
+                      : "Save Changes"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="card shadow-sm mb-4">
         <div className="card-header">
