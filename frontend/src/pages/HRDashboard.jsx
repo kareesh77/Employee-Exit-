@@ -421,9 +421,9 @@ function HRDashboard() {
         previous.map((request) =>
           request.id === requestId
             ? {
-                ...request,
-                status: status,
-              }
+              ...request,
+              status: status,
+            }
             : request
         )
       );
@@ -474,10 +474,10 @@ function HRDashboard() {
         previous.map((clearance) =>
           clearance.id === clearanceId
             ? {
-                ...clearance,
-                status: status,
-                comments: `Clearance ${status} by HR`,
-              }
+              ...clearance,
+              status: status,
+              comments: `Clearance ${status} by HR`,
+            }
             : clearance
         )
       );
@@ -972,12 +972,17 @@ function HRDashboard() {
           tabIndex="-1"
           style={{ backgroundColor: "rgba(0, 0, 0, 0.5)" }}
         >
-          <div className="modal-dialog modal-lg modal-dialog-centered">
+          <div className="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
             <div className="modal-content">
               <div className="modal-header">
-                <h5 className="modal-title">
-                  Employee Details
-                </h5>
+                <div>
+                  <h5 className="modal-title mb-1">
+                    Employee Profile
+                  </h5>
+                  <small className="text-muted">
+                    {viewingEmployee.employee_code}
+                  </small>
+                </div>
 
                 <button
                   type="button"
@@ -987,80 +992,169 @@ function HRDashboard() {
               </div>
 
               <div className="modal-body">
-                <div className="row">
-                  <div className="col-md-6 mb-3">
-                    <strong>Employee ID</strong>
-                    <div>{viewingEmployee.id}</div>
+                <div className="card mb-4">
+                  <div className="card-header">
+                    <h6 className="mb-0">Personal Information</h6>
                   </div>
 
-                  <div className="col-md-6 mb-3">
-                    <strong>User ID</strong>
-                    <div>{viewingEmployee.user_id}</div>
-                  </div>
+                  <div className="card-body">
+                    <div className="row">
+                      <div className="col-md-6 mb-3">
+                        <strong>First Name</strong>
+                        <div>{viewingEmployee.first_name || "-"}</div>
+                      </div>
 
-                  <div className="col-md-6 mb-3">
-                    <strong>Email</strong>
-                    <div>{viewingEmployee.email}</div>
-                  </div>
+                      <div className="col-md-6 mb-3">
+                        <strong>Last Name</strong>
+                        <div>{viewingEmployee.last_name || "-"}</div>
+                      </div>
 
-                  <div className="col-md-6 mb-3">
-                    <strong>Employee Code</strong>
-                    <div>
-                      {viewingEmployee.employee_code}
+                      <div className="col-md-6 mb-3">
+                        <strong>Email</strong>
+                        <div>{viewingEmployee.email || "-"}</div>
+                      </div>
+
+                      <div className="col-md-6 mb-3">
+                        <strong>Phone</strong>
+                        <div>{viewingEmployee.phone || "-"}</div>
+                      </div>
+
+                      <div className="col-md-6 mb-3">
+                        <strong>Date of Birth</strong>
+                        <div>-</div>
+                      </div>
+
+                      <div className="col-md-6 mb-3">
+                        <strong>Emergency Contact</strong>
+                        <div>-</div>
+                      </div>
+
+                      <div className="col-12 mb-3">
+                        <strong>Address</strong>
+                        <div>-</div>
+                      </div>
                     </div>
                   </div>
+                </div>
 
-                  <div className="col-md-6 mb-3">
-                    <strong>First Name</strong>
-                    <div>{viewingEmployee.first_name}</div>
+                <div className="card mb-4">
+                  <div className="card-header">
+                    <h6 className="mb-0">Employment Information</h6>
                   </div>
 
-                  <div className="col-md-6 mb-3">
-                    <strong>Last Name</strong>
-                    <div>{viewingEmployee.last_name}</div>
-                  </div>
+                  <div className="card-body">
+                    <div className="row">
+                      <div className="col-md-6 mb-3">
+                        <strong>Employee ID</strong>
+                        <div>{viewingEmployee.id}</div>
+                      </div>
 
-                  <div className="col-md-6 mb-3">
-                    <strong>Phone</strong>
-                    <div>
-                      {viewingEmployee.phone || "-"}
+                      <div className="col-md-6 mb-3">
+                        <strong>User ID</strong>
+                        <div>{viewingEmployee.user_id}</div>
+                      </div>
+
+                      <div className="col-md-6 mb-3">
+                        <strong>Employee Code</strong>
+                        <div>{viewingEmployee.employee_code || "-"}</div>
+                      </div>
+
+                      <div className="col-md-6 mb-3">
+                        <strong>Department</strong>
+                        <div>
+                          {viewingEmployee.department_id
+                            ? `Department ${viewingEmployee.department_id}`
+                            : "-"}
+                        </div>
+                      </div>
+
+                      <div className="col-md-6 mb-3">
+                        <strong>Designation</strong>
+                        <div>{viewingEmployee.designation || "-"}</div>
+                      </div>
+
+                      <div className="col-md-6 mb-3">
+                        <strong>Joining Date</strong>
+                        <div>{viewingEmployee.joining_date || "-"}</div>
+                      </div>
+
+                      <div className="col-md-6 mb-3">
+                        <strong>Employment Status</strong>
+                        <div>
+                          {viewingEmployee.is_active ? (
+                            <span className="badge bg-success">
+                              Active
+                            </span>
+                          ) : (
+                            <span className="badge bg-danger">
+                              Inactive
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="col-md-6 mb-3">
+                        <strong>Manager</strong>
+                        <div>-</div>
+                      </div>
                     </div>
                   </div>
+                </div>
 
-                  <div className="col-md-6 mb-3">
-                    <strong>Department ID</strong>
-                    <div>
-                      {viewingEmployee.department_id}
-                    </div>
+                <div className="card mb-4">
+                  <div className="card-header">
+                    <h6 className="mb-0">Documents</h6>
                   </div>
 
-                  <div className="col-md-6 mb-3">
-                    <strong>Designation</strong>
-                    <div>
-                      {viewingEmployee.designation}
-                    </div>
-                  </div>
-
-                  <div className="col-md-6 mb-3">
-                    <strong>Joining Date</strong>
-                    <div>
-                      {viewingEmployee.joining_date}
-                    </div>
-                  </div>
-
-                  <div className="col-md-6 mb-3">
-                    <strong>Status</strong>
-                    <div>
-                      {viewingEmployee.is_active ? (
-                        <span className="badge bg-success">
-                          Active
+                  <div className="card-body">
+                    <div className="list-group">
+                      <div className="list-group-item d-flex justify-content-between align-items-center">
+                        <span>Resume</span>
+                        <span className="badge bg-secondary">
+                          Not Uploaded
                         </span>
-                      ) : (
-                        <span className="badge bg-danger">
-                          Inactive
+                      </div>
+
+                      <div className="list-group-item d-flex justify-content-between align-items-center">
+                        <span>Offer Letter</span>
+                        <span className="badge bg-secondary">
+                          Not Uploaded
                         </span>
-                      )}
+                      </div>
+
+                      <div className="list-group-item d-flex justify-content-between align-items-center">
+                        <span>ID Proof</span>
+                        <span className="badge bg-secondary">
+                          Not Uploaded
+                        </span>
+                      </div>
+
+                      <div className="list-group-item d-flex justify-content-between align-items-center">
+                        <span>Certificates</span>
+                        <span className="badge bg-secondary">
+                          Not Uploaded
+                        </span>
+                      </div>
+
+                      <div className="list-group-item d-flex justify-content-between align-items-center">
+                        <span>Employment Contract</span>
+                        <span className="badge bg-secondary">
+                          Not Uploaded
+                        </span>
+                      </div>
                     </div>
+                  </div>
+                </div>
+
+                <div className="card">
+                  <div className="card-header">
+                    <h6 className="mb-0">Exit Information</h6>
+                  </div>
+
+                  <div className="card-body">
+                    <p className="text-muted mb-0">
+                      No exit information is available for this employee.
+                    </p>
                   </div>
                 </div>
               </div>
@@ -1072,6 +1166,17 @@ function HRDashboard() {
                   onClick={() => setViewingEmployee(null)}
                 >
                   Close
+                </button>
+
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => {
+                    setViewingEmployee(null);
+                    openEditEmployee(viewingEmployee);
+                  }}
+                >
+                  Edit Employee
                 </button>
               </div>
             </div>
@@ -1335,13 +1440,12 @@ function HRDashboard() {
 
                         <td>
                           <span
-                            className={`badge ${
-                              request.status === "approved"
+                            className={`badge ${request.status === "approved"
                                 ? "bg-success"
                                 : request.status === "rejected"
                                   ? "bg-danger"
                                   : "bg-warning text-dark"
-                            }`}
+                              }`}
                           >
                             {request.status}
                           </span>
