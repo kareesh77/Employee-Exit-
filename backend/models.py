@@ -1,3 +1,4 @@
+from sqlalchemy.dialects.mysql import INTEGER
 from sqlalchemy import (
     BigInteger,
     Boolean,
@@ -94,3 +95,18 @@ class AuditLog(Base):
     action = Column(String(255), nullable=False)
     entity_type = Column(String(100), nullable=False)
     entity_id = Column(BigInteger, nullable=True)
+
+
+class EmployeeDocument(Base):
+    __tablename__ = "employee_documents"
+
+    id = Column(INTEGER(unsigned=True), primary_key=True, index=True)
+    employee_id = Column(
+        INTEGER(unsigned=True),
+        ForeignKey("employees.id"),
+        nullable=False
+    )
+    document_type = Column(String(100), nullable=False)
+    file_name = Column(String(255), nullable=False)
+    file_path = Column(String(500), nullable=False)
+    uploaded_at = Column(DateTime, nullable=False)

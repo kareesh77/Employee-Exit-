@@ -5,9 +5,8 @@ from dotenv import load_dotenv
 from jose import jwt
 from passlib.context import CryptContext
 
-from fastapi import Depends, FastAPI, HTTPException
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-security = HTTPBearer()
+from fastapi import Depends, FastAPI, HTTPException, File, UploadFile
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
@@ -20,6 +19,7 @@ from models import (
     AuditLog,
     Clearance,
     Employee,
+    EmployeeDocument,
     ExitInterview,
     ExitRequest,
     User,
@@ -62,6 +62,9 @@ ACCESS_TOKEN_EXPIRE_MINUTES = int(
 )
 
 security = HTTPBearer()
+UPLOAD_DIR = "uploads/employee_documents"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
 class HREmployeeUpdate(BaseModel):
     email: str | None = None
     employee_code: str | None = None
@@ -687,7 +690,6 @@ def create_exit_request(
 
     return new_exit_request
 
-
 @app.get(
     "/exit-requests",
     response_model=list[ExitRequestResponse],
@@ -965,6 +967,238 @@ def create_exit_interview(
 
     return new_interview
 
+@app.post("/hr/employees/{employee_id}/documents")
+def upload_employee_document(
+    employee_id: int,
+    document_type: str,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role not in ["admin", "hr"]:
+        raise HTTPException(
+            status_code=403,
+            detail="Only HR administrators can upload employee documents",
+        )
+
+    employee = (
+        db.query(Employee)
+        .filter(Employee.id == employee_id)
+        .first()
+    )
+
+    if not employee:
+        raise HTTPException(
+            status_code=404,
+            detail="Employee not found",
+        )
+
+    if not file.filename:
+        raise HTTPException(
+            status_code=400,
+            detail="File name is required",
+        )
+
+    safe_file_name = os.path.basename(file.filename)
+    employee_folder = os.path.join(
+        UPLOAD_DIR,
+        str(employee_id),
+    )
+
+    os.makedirs(employee_folder, exist_ok=True)
+
+    file_path = os.path.join(
+        employee_folder,
+        safe_file_name,
+    )
+
+    try:
+        with open(file_path, "wb") as output_file:
+            output_file.write(file.file.read())
+
+        document = EmployeeDocument(
+            employee_id=employee_id,
+            document_type=document_type,
+            file_name=safe_file_name,
+            file_path=file_path,
+            uploaded_at=datetime.now(),
+        )
+
+        db.add(document)
+
+        create_audit_log(
+            db=db,
+            user_id=current_user.id,
+            action="Employee document uploaded by HR",
+            entity_type="EmployeeDocument",
+            entity_id=employee_id,
+        )
+
+        db.commit()
+        db.refresh(document)
+
+        return {
+            "message": "Employee document uploaded successfully",
+            "document_id": document.id,
+            "employee_id": document.employee_id,
+            "document_type": document.document_type,
+            "file_name": document.file_name,
+            "uploaded_at": document.uploaded_at,
+        }
+
+    except Exception:
+        db.rollback()
+
+        if os.path.exists(file_path):
+            os.remove(file_path)
+
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to upload employee document",
+        )
+
+
+@app.get("/hr/employees/{employee_id}/documents")
+def get_employee_documents(
+    employee_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role not in ["admin", "hr"]:
+        raise HTTPException(
+            status_code=403,
+            detail="Only HR administrators can view employee documents",
+        )
+
+    employee = (
+        db.query(Employee)
+        .filter(Employee.id == employee_id)
+        .first()
+    )
+
+    if not employee:
+        raise HTTPException(
+            status_code=404,
+            detail="Employee not found",
+        )
+
+    documents = (
+        db.query(EmployeeDocument)
+        .filter(EmployeeDocument.employee_id == employee_id)
+        .order_by(EmployeeDocument.id.desc())
+        .all()
+    )
+
+    return [
+        {
+            "id": document.id,
+            "employee_id": document.employee_id,
+            "document_type": document.document_type,
+            "file_name": document.file_name,
+            "uploaded_at": document.uploaded_at,
+        }
+        for document in documents
+    ]
+
+@app.get("/hr/employees/{employee_id}/documents/{document_id}/download")
+def download_employee_document(
+    employee_id: int,
+    document_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role not in ["admin", "hr"]:
+        raise HTTPException(
+            status_code=403,
+            detail="Only HR administrators can download employee documents",
+        )
+
+    document = (
+        db.query(EmployeeDocument)
+        .filter(
+            EmployeeDocument.id == document_id,
+            EmployeeDocument.employee_id == employee_id,
+        )
+        .first()
+    )
+
+    if not document:
+        raise HTTPException(
+            status_code=404,
+            detail="Employee document not found",
+        )
+
+    if not os.path.exists(document.file_path):
+        raise HTTPException(
+            status_code=404,
+            detail="Document file not found",
+        )
+
+    return FileResponse(
+        path=document.file_path,
+        filename=document.file_name,
+    )
+
+
+@app.delete("/hr/employees/{employee_id}/documents/{document_id}")
+def delete_employee_document(
+    employee_id: int,
+    document_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role not in ["admin", "hr"]:
+        raise HTTPException(
+            status_code=403,
+            detail="Only HR administrators can delete employee documents",
+        )
+
+    document = (
+        db.query(EmployeeDocument)
+        .filter(
+            EmployeeDocument.id == document_id,
+            EmployeeDocument.employee_id == employee_id,
+        )
+        .first()
+    )
+
+    if not document:
+        raise HTTPException(
+            status_code=404,
+            detail="Employee document not found",
+        )
+
+    file_path = document.file_path
+
+    try:
+        db.delete(document)
+
+        create_audit_log(
+            db=db,
+            user_id=current_user.id,
+            action="Employee document deleted by HR",
+            entity_type="EmployeeDocument",
+            entity_id=employee_id,
+        )
+
+        db.commit()
+
+        if os.path.exists(file_path):
+            os.remove(file_path)
+
+        return {
+            "message": "Employee document deleted successfully",
+            "document_id": document_id,
+            "employee_id": employee_id,
+        }
+
+    except Exception:
+        db.rollback()
+
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to delete employee document",
+        )
 
 @app.post(
     "/login",
