@@ -48,6 +48,14 @@ function HRDashboard() {
   const [employeeActionSuccess, setEmployeeActionSuccess] = useState("");
   const [savingEmployee, setSavingEmployee] = useState(false);
 
+  const [documents, setDocuments] = useState([]);
+  const [loadingDocuments, setLoadingDocuments] = useState(false);
+  const [documentError, setDocumentError] = useState("");
+  const [documentSuccess, setDocumentSuccess] = useState("");
+  const [documentType, setDocumentType] = useState("Resume");
+  const [selectedDocumentFile, setSelectedDocumentFile] = useState(null);
+  const [uploadingDocument, setUploadingDocument] = useState(false);
+
   const [selectedExitRequest, setSelectedExitRequest] = useState("");
   const [feedback, setFeedback] = useState("");
   const [reasonForLeaving, setReasonForLeaving] = useState("");
@@ -240,9 +248,211 @@ function HRDashboard() {
     }));
   };
 
+  const loadEmployeeDocuments = async (employeeId) => {
+    try {
+      setLoadingDocuments(true);
+      setDocumentError("");
+      setDocumentSuccess("");
+
+      const response = await api.get(
+        `/hr/employees/${employeeId}/documents`
+      );
+
+      setDocuments(response.data);
+    } catch (error) {
+      console.error(
+        "Failed to load employee documents:",
+        error
+      );
+
+      const detail = error.response?.data?.detail;
+
+      setDocumentError(
+        typeof detail === "string"
+          ? detail
+          : "Unable to load employee documents."
+      );
+    } finally {
+      setLoadingDocuments(false);
+    }
+  };
+
   const openViewEmployee = (employee) => {
     setEmployeeActionError("");
     setViewingEmployee(employee);
+
+    setDocuments([]);
+    setDocumentError("");
+    setDocumentSuccess("");
+    setDocumentType("Resume");
+    setSelectedDocumentFile(null);
+
+    loadEmployeeDocuments(employee.id);
+  };
+
+  const handleDocumentFileChange = (event) => {
+    const file = event.target.files?.[0] || null;
+
+    setSelectedDocumentFile(file);
+  };
+
+  const uploadEmployeeDocument = async (event) => {
+    event.preventDefault();
+
+    if (!viewingEmployee) {
+      return;
+    }
+
+    if (!selectedDocumentFile) {
+      setDocumentError("Please select a document file.");
+      return;
+    }
+
+    try {
+      setUploadingDocument(true);
+      setDocumentError("");
+      setDocumentSuccess("");
+
+      const formData = new FormData();
+
+      formData.append("document_type", documentType);
+      formData.append("file", selectedDocumentFile);
+
+      const response = await api.post(
+        `/hr/employees/${viewingEmployee.id}/documents`,
+        formData
+      );
+
+      setDocumentSuccess(
+        response.data.message ||
+        "Employee document uploaded successfully."
+      );
+
+      setSelectedDocumentFile(null);
+
+      const fileInput = document.getElementById(
+        "employeeDocumentFile"
+      );
+
+      if (fileInput) {
+        fileInput.value = "";
+      }
+
+      await loadEmployeeDocuments(viewingEmployee.id);
+      await refreshAuditLogs();
+    } catch (error) {
+      console.error(
+        "Failed to upload employee document:",
+        error
+      );
+
+      console.error(
+        "Response:",
+        error.response?.data
+      );
+
+      const detail = error.response?.data?.detail;
+
+      setDocumentError(
+        typeof detail === "string"
+          ? detail
+          : "Unable to upload employee document."
+      );
+    } finally {
+      setUploadingDocument(false);
+    }
+  };
+
+  const downloadEmployeeDocument = async (document) => {
+    if (!viewingEmployee) {
+      return;
+    }
+
+    try {
+      setDocumentError("");
+
+      const response = await api.get(
+        `/hr/employees/${viewingEmployee.id}/documents/${document.id}/download`,
+        {
+          responseType: "blob",
+        }
+      );
+
+      const blobUrl = window.URL.createObjectURL(
+        response.data
+      );
+
+      const link = window.document.createElement("a");
+
+      link.href = blobUrl;
+      link.download = document.file_name;
+
+      window.document.body.appendChild(link);
+
+      link.click();
+
+      link.remove();
+
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (error) {
+      console.error(
+        "Failed to download employee document:",
+        error
+      );
+
+      setDocumentError(
+        "Unable to download employee document."
+      );
+    }
+  };
+
+  const deleteEmployeeDocument = async (document) => {
+    if (!viewingEmployee) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Are you sure you want to delete ${document.file_name}?`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setDocumentError("");
+      setDocumentSuccess("");
+
+      const response = await api.delete(
+        `/hr/employees/${viewingEmployee.id}/documents/${document.id}`
+      );
+
+      setDocumentSuccess(
+        response.data.message ||
+        "Employee document deleted successfully."
+      );
+
+      await loadEmployeeDocuments(viewingEmployee.id);
+      await refreshAuditLogs();
+    } catch (error) {
+      console.error(
+        "Failed to delete employee document:",
+        error
+      );
+
+      console.error(
+        "Response:",
+        error.response?.data
+      );
+
+      const detail = error.response?.data?.detail;
+
+      setDocumentError(
+        typeof detail === "string"
+          ? detail
+          : "Unable to delete employee document."
+      );
+    }
   };
 
   const openEditEmployee = (employee) => {
@@ -1107,42 +1317,176 @@ function HRDashboard() {
                   </div>
 
                   <div className="card-body">
-                    <div className="list-group">
-                      <div className="list-group-item d-flex justify-content-between align-items-center">
-                        <span>Resume</span>
-                        <span className="badge bg-secondary">
-                          Not Uploaded
-                        </span>
+                    {documentSuccess && (
+                      <div className="alert alert-success">
+                        {documentSuccess}
                       </div>
+                    )}
 
-                      <div className="list-group-item d-flex justify-content-between align-items-center">
-                        <span>Offer Letter</span>
-                        <span className="badge bg-secondary">
-                          Not Uploaded
-                        </span>
+                    {documentError && (
+                      <div className="alert alert-danger">
+                        {documentError}
                       </div>
+                    )}
 
-                      <div className="list-group-item d-flex justify-content-between align-items-center">
-                        <span>ID Proof</span>
-                        <span className="badge bg-secondary">
-                          Not Uploaded
-                        </span>
-                      </div>
+                    <form
+                      onSubmit={uploadEmployeeDocument}
+                      className="mb-4"
+                    >
+                      <div className="row align-items-end">
 
-                      <div className="list-group-item d-flex justify-content-between align-items-center">
-                        <span>Certificates</span>
-                        <span className="badge bg-secondary">
-                          Not Uploaded
-                        </span>
-                      </div>
+                        <div className="col-md-4 mb-3">
+                          <label
+                            htmlFor="employeeDocumentType"
+                            className="form-label"
+                          >
+                            Document Type
+                          </label>
 
-                      <div className="list-group-item d-flex justify-content-between align-items-center">
-                        <span>Employment Contract</span>
-                        <span className="badge bg-secondary">
-                          Not Uploaded
-                        </span>
+                          <select
+                            id="employeeDocumentType"
+                            className="form-select"
+                            value={documentType}
+                            onChange={(event) =>
+                              setDocumentType(event.target.value)
+                            }
+                          >
+                            <option value="Resume">
+                              Resume
+                            </option>
+
+                            <option value="ID Proof">
+                              ID Proof
+                            </option>
+
+                            <option value="Offer Letter">
+                              Offer Letter
+                            </option>
+
+                            <option value="Certificate">
+                              Certificate
+                            </option>
+
+                            <option value="Employment Contract">
+                              Employment Contract
+                            </option>
+
+                            <option value="Other">
+                              Other
+                            </option>
+                          </select>
+                        </div>
+
+                        <div className="col-md-5 mb-3">
+                          <label
+                            htmlFor="employeeDocumentFile"
+                            className="form-label"
+                          >
+                            Select File
+                          </label>
+
+                          <input
+                            id="employeeDocumentFile"
+                            type="file"
+                            className="form-control"
+                            onChange={handleDocumentFileChange}
+                          />
+                        </div>
+
+                        <div className="col-md-3 mb-3">
+                          <button
+                            type="submit"
+                            className="btn btn-primary w-100"
+                            disabled={uploadingDocument}
+                          >
+                            {uploadingDocument
+                              ? "Uploading..."
+                              : "Upload Document"}
+                          </button>
+                        </div>
+
                       </div>
-                    </div>
+                    </form>
+
+                    {loadingDocuments ? (
+                      <p className="text-muted">
+                        Loading documents...
+                      </p>
+                    ) : documents.length === 0 ? (
+                      <p className="text-muted">
+                        No documents uploaded for this employee.
+                      </p>
+                    ) : (
+                      <div className="table-responsive">
+                        <table className="table table-bordered table-hover align-middle">
+
+                          <thead>
+                            <tr>
+                              <th>ID</th>
+                              <th>Document Type</th>
+                              <th>File Name</th>
+                              <th>Uploaded At</th>
+                              <th>Actions</th>
+                            </tr>
+                          </thead>
+
+                          <tbody>
+                            {documents.map((document) => (
+                              <tr key={document.id}>
+
+                                <td>
+                                  {document.id}
+                                </td>
+
+                                <td>
+                                  {document.document_type}
+                                </td>
+
+                                <td>
+                                  {document.file_name}
+                                </td>
+
+                                <td>
+                                  {document.uploaded_at}
+                                </td>
+
+                                <td>
+                                  <div className="d-flex flex-wrap gap-2">
+
+                                    <button
+                                      type="button"
+                                      className="btn btn-success btn-sm"
+                                      onClick={() =>
+                                        downloadEmployeeDocument(
+                                          document
+                                        )
+                                      }
+                                    >
+                                      Download
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      className="btn btn-danger btn-sm"
+                                      onClick={() =>
+                                        deleteEmployeeDocument(
+                                          document
+                                        )
+                                      }
+                                    >
+                                      Delete
+                                    </button>
+
+                                  </div>
+                                </td>
+
+                              </tr>
+                            ))}
+                          </tbody>
+
+                        </table>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -1441,10 +1785,10 @@ function HRDashboard() {
                         <td>
                           <span
                             className={`badge ${request.status === "approved"
-                                ? "bg-success"
-                                : request.status === "rejected"
-                                  ? "bg-danger"
-                                  : "bg-warning text-dark"
+                              ? "bg-success"
+                              : request.status === "rejected"
+                                ? "bg-danger"
+                                : "bg-warning text-dark"
                               }`}
                           >
                             {request.status}
