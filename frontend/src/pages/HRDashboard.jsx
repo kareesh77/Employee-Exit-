@@ -320,7 +320,12 @@ function HRDashboard() {
 
       const response = await api.post(
         `/hr/employees/${viewingEmployee.id}/documents`,
-        formData
+        formData,
+        {
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+        }
       );
 
       setDocumentSuccess(
