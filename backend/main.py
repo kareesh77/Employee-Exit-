@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 from jose import jwt
 from passlib.context import CryptContext
 
-from fastapi import Depends, FastAPI, HTTPException, File, UploadFile
+from fastapi import Depends, FastAPI, HTTPException, File, Form, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -970,7 +970,7 @@ def create_exit_interview(
 @app.post("/hr/employees/{employee_id}/documents")
 def upload_employee_document(
     employee_id: int,
-    document_type: str,
+    document_type: str = Form(...),
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -1056,7 +1056,6 @@ def upload_employee_document(
             status_code=500,
             detail="Unable to upload employee document",
         )
-
 
 @app.get("/hr/employees/{employee_id}/documents")
 def get_employee_documents(
