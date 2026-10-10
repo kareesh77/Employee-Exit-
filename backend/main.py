@@ -49,21 +49,16 @@ pwd_context = CryptContext(
 
 SECRET_KEY = os.getenv("SECRET_KEY")
 
-ALGORITHM = os.getenv(
-    "ALGORITHM",
-    "HS256",
-)
+ALGORITHM = os.getenv("ALGORITHM", "HS256")
 
 ACCESS_TOKEN_EXPIRE_MINUTES = int(
-    os.getenv(
-        "ACCESS_TOKEN_EXPIRE_MINUTES",
-        "60",
-    )
+    os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60")
 )
 
 security = HTTPBearer()
 UPLOAD_DIR = "uploads/employee_documents"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+
 
 class HREmployeeUpdate(BaseModel):
     email: str | None = None
@@ -96,7 +91,7 @@ def create_access_token(user_id: int, role: str):
 
 def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     token = credentials.credentials
 
@@ -104,7 +99,7 @@ def get_current_user(
         payload = jwt.decode(
             token,
             SECRET_KEY,
-            algorithms=[ALGORITHM]
+            algorithms=[ALGORITHM],
         )
 
         user_id = payload.get("user_id")
@@ -112,7 +107,7 @@ def get_current_user(
         if user_id is None:
             raise HTTPException(
                 status_code=401,
-                detail="Invalid token"
+                detail="Invalid token",
             )
 
     except HTTPException:
@@ -121,7 +116,7 @@ def get_current_user(
     except Exception:
         raise HTTPException(
             status_code=401,
-            detail="Invalid or expired token"
+            detail="Invalid or expired token",
         )
 
     user = (
@@ -133,13 +128,13 @@ def get_current_user(
     if not user:
         raise HTTPException(
             status_code=401,
-            detail="User not found"
+            detail="User not found",
         )
 
     if not user.is_active:
         raise HTTPException(
             status_code=403,
-            detail="User account is inactive"
+            detail="User account is inactive",
         )
 
     return user
@@ -159,12 +154,12 @@ FRONTEND_URL = os.getenv(
 
 app.add_middleware(
     CORSMiddleware,
-allow_origins=[
-    FRONTEND_URL,
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-    "https://employee-exit-frontend.onrender.com",
-],
+    allow_origins=[
+        FRONTEND_URL,
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "https://employee-exit-frontend.onrender.com",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -207,9 +202,7 @@ def database_test(
     db: Session = Depends(get_db),
 ):
     try:
-        result = db.execute(
-            text("SELECT 1")
-        ).scalar()
+        result = db.execute(text("SELECT 1")).scalar()
 
         return {
             "database": "connected",
@@ -228,6 +221,7 @@ def database_test(
             ),
             "error": str(e),
         }
+
 
 @app.post("/hr/employees")
 def create_employee_by_hr(
@@ -256,8 +250,7 @@ def create_employee_by_hr(
     existing_employee = (
         db.query(Employee)
         .filter(
-            Employee.employee_code
-            == employee.employee_code
+            Employee.employee_code == employee.employee_code
         )
         .first()
     )
@@ -269,9 +262,7 @@ def create_employee_by_hr(
         )
 
     try:
-        password_hash = pwd_context.hash(
-            employee.password
-        )
+        password_hash = pwd_context.hash(employee.password)
 
         new_user = User(
             email=employee.email,
@@ -306,7 +297,6 @@ def create_employee_by_hr(
         )
 
         db.commit()
-
         db.refresh(new_user)
         db.refresh(new_employee)
 
@@ -319,12 +309,17 @@ def create_employee_by_hr(
             "role": new_user.role,
         }
 
+    except HTTPException:
+        db.rollback()
+        raise
+
     except Exception:
         db.rollback()
         raise HTTPException(
             status_code=500,
             detail="Unable to create employee account",
         )
+
 
 @app.get("/hr/employees")
 def get_hr_employees(
@@ -352,21 +347,19 @@ def get_hr_employees(
             .first()
         )
 
-        result.append(
-            {
-                "id": employee.id,
-                "user_id": employee.user_id,
-                "email": user.email if user else None,
-                "is_active": user.is_active if user else False,
-                "employee_code": employee.employee_code,
-                "first_name": employee.first_name,
-                "last_name": employee.last_name,
-                "phone": employee.phone,
-                "department_id": employee.department_id,
-                "designation": employee.designation,
-                "joining_date": employee.joining_date,
-            }
-        )
+        result.append({
+            "id": employee.id,
+            "user_id": employee.user_id,
+            "email": user.email if user else None,
+            "is_active": user.is_active if user else False,
+            "employee_code": employee.employee_code,
+            "first_name": employee.first_name,
+            "last_name": employee.last_name,
+            "phone": employee.phone,
+            "department_id": employee.department_id,
+            "designation": employee.designation,
+            "joining_date": employee.joining_date,
+        })
 
     return result
 
@@ -488,6 +481,7 @@ def update_employee_by_hr(
         "is_active": user.is_active,
     }
 
+
 @app.put("/hr/employees/{employee_id}/deactivate")
 def deactivate_employee_by_hr(
     employee_id: int,
@@ -549,6 +543,7 @@ def deactivate_employee_by_hr(
         "email": user.email,
         "is_active": user.is_active,
     }
+
 
 @app.put("/hr/employees/{employee_id}/reactivate")
 def reactivate_employee_by_hr(
@@ -612,6 +607,7 @@ def reactivate_employee_by_hr(
         "is_active": user.is_active,
     }
 
+
 @app.post(
     "/employees",
     response_model=EmployeeResponse,
@@ -667,6 +663,12 @@ def create_exit_request(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    if current_user.role != "employee":
+        raise HTTPException(
+            status_code=403,
+            detail="Only employees can submit exit requests",
+        )
+
     employee = (
         db.query(Employee)
         .filter(Employee.user_id == current_user.id)
@@ -676,13 +678,7 @@ def create_exit_request(
     if not employee:
         raise HTTPException(
             status_code=404,
-            detail="Employee profile not found",
-        )
-
-    if exit_request.employee_id != employee.id:
-        raise HTTPException(
-            status_code=403,
-            detail="You can only submit your own exit request",
+            detail="Employee profile not found for the logged-in account",
         )
 
     if exit_request.proposed_last_working_date < date.today():
@@ -709,9 +705,7 @@ def create_exit_request(
     new_exit_request = ExitRequest(
         employee_id=employee.id,
         reason=exit_request.reason,
-        proposed_last_working_date=(
-            exit_request.proposed_last_working_date
-        ),
+        proposed_last_working_date=exit_request.proposed_last_working_date,
         status="pending",
     )
 
@@ -750,24 +744,26 @@ def get_exit_requests(
 ):
     query = db.query(ExitRequest)
 
-    if current_user.role not in ["admin", "hr"]:
-        employee = (
-            db.query(Employee)
-            .filter(Employee.user_id == current_user.id)
-            .first()
+    if current_user.role in ["admin", "hr"]:
+        return query.order_by(ExitRequest.id.desc()).all()
+
+    employee = (
+        db.query(Employee)
+        .filter(Employee.user_id == current_user.id)
+        .first()
+    )
+
+    if not employee:
+        raise HTTPException(
+            status_code=404,
+            detail="Employee profile not found",
         )
 
-        if not employee:
-            raise HTTPException(
-                status_code=404,
-                detail="Employee profile not found",
-            )
-
-        query = query.filter(
-            ExitRequest.employee_id == employee.id
-        )
-
-    return query.order_by(ExitRequest.id.desc()).all()
+    return (
+        query.filter(ExitRequest.employee_id == employee.id)
+        .order_by(ExitRequest.id.desc())
+        .all()
+    )
 
 
 @app.put("/exit-requests/{exit_request_id}/status")
@@ -812,9 +808,7 @@ def update_exit_request_status(
 
         approval = (
             db.query(Approval)
-            .filter(
-                Approval.exit_request_id == exit_request.id
-            )
+            .filter(Approval.exit_request_id == exit_request.id)
             .first()
         )
 
@@ -941,9 +935,7 @@ def get_clearances(
     return db.query(Clearance).all()
 
 
-@app.put(
-    "/clearances/{clearance_id}/status"
-)
+@app.put("/clearances/{clearance_id}/status")
 def update_clearance_status(
     clearance_id: int,
     status: str,
@@ -1003,18 +995,12 @@ def get_my_exit_interviews(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    interviews = (
+    return (
         db.query(ExitInterview)
-        .filter(
-            ExitInterview.user_id == current_user.id
-        )
-        .order_by(
-            ExitInterview.id.desc()
-        )
+        .filter(ExitInterview.user_id == current_user.id)
+        .order_by(ExitInterview.id.desc())
         .all()
     )
-
-    return interviews
 
 
 @app.post(
@@ -1026,6 +1012,22 @@ def create_exit_interview(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    new_exit_request = (
+        db.query(ExitRequest)
+        .join(Employee, Employee.id == ExitRequest.employee_id)
+        .filter(
+            ExitRequest.id == interview.exit_request_id,
+            Employee.user_id == current_user.id,
+        )
+        .first()
+    )
+
+    if not new_exit_request:
+        raise HTTPException(
+            status_code=404,
+            detail="Your exit request was not found",
+        )
+
     new_interview = ExitInterview(
         exit_request_id=interview.exit_request_id,
         user_id=current_user.id,
@@ -1034,21 +1036,30 @@ def create_exit_interview(
         suggestions=interview.suggestions,
     )
 
-    db.add(new_interview)
-    db.commit()
-    db.refresh(new_interview)
+    try:
+        db.add(new_interview)
+        db.flush()
 
-    create_audit_log(
-        db=db,
-        user_id=current_user.id,
-        action="Exit interview created",
-        entity_type="ExitInterview",
-        entity_id=new_interview.id,
-    )
+        create_audit_log(
+            db=db,
+            user_id=current_user.id,
+            action="Exit interview created",
+            entity_type="ExitInterview",
+            entity_id=new_interview.id,
+        )
 
-    db.commit()
+        db.commit()
+        db.refresh(new_interview)
 
-    return new_interview
+        return new_interview
+
+    except Exception:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to create exit interview",
+        )
+
 
 @app.post("/hr/employees/{employee_id}/documents")
 def upload_employee_document(
@@ -1083,17 +1094,10 @@ def upload_employee_document(
         )
 
     safe_file_name = os.path.basename(file.filename)
-    employee_folder = os.path.join(
-        UPLOAD_DIR,
-        str(employee_id),
-    )
-
+    employee_folder = os.path.join(UPLOAD_DIR, str(employee_id))
     os.makedirs(employee_folder, exist_ok=True)
 
-    file_path = os.path.join(
-        employee_folder,
-        safe_file_name,
-    )
+    file_path = os.path.join(employee_folder, safe_file_name)
 
     try:
         with open(file_path, "wb") as output_file:
@@ -1140,6 +1144,7 @@ def upload_employee_document(
             detail="Unable to upload employee document",
         )
 
+
 @app.get("/hr/employees/{employee_id}/documents")
 def get_employee_documents(
     employee_id: int,
@@ -1181,6 +1186,7 @@ def get_employee_documents(
         }
         for document in documents
     ]
+
 
 @app.get("/hr/employees/{employee_id}/documents/{document_id}/download")
 def download_employee_document(
@@ -1276,11 +1282,11 @@ def delete_employee_document(
 
     except Exception:
         db.rollback()
-
         raise HTTPException(
             status_code=500,
             detail="Unable to delete employee document",
         )
+
 
 @app.post(
     "/login",
@@ -1292,9 +1298,7 @@ def login(
 ):
     user = (
         db.query(User)
-        .filter(
-            User.email == login_data.email
-        )
+        .filter(User.email == login_data.email)
         .first()
     )
 
@@ -1348,12 +1352,8 @@ def login(
 def get_audit_logs(
     db: Session = Depends(get_db),
 ):
-    logs = (
+    return (
         db.query(AuditLog)
-        .order_by(
-            AuditLog.id.desc()
-        )
+        .order_by(AuditLog.id.desc())
         .all()
     )
-
-    return logs
