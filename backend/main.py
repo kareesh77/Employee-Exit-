@@ -664,45 +664,113 @@ def get_employees(
 )
 def create_exit_request(
     exit_request: ExitRequestCreate,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    employee = (
+        db.query(Employee)
+        .filter(Employee.user_id == current_user.id)
+        .first()
+    )
+
+    if not employee:
+        raise HTTPException(
+            status_code=404,
+            detail="Employee profile not found",
+        )
+
+    if exit_request.employee_id != employee.id:
+        raise HTTPException(
+            status_code=403,
+            detail="You can only submit your own exit request",
+        )
+
+    if exit_request.proposed_last_working_date < date.today():
+        raise HTTPException(
+            status_code=400,
+            detail="Last working date cannot be in the past",
+        )
+
+    existing_request = (
+        db.query(ExitRequest)
+        .filter(
+            ExitRequest.employee_id == employee.id,
+            ExitRequest.status == "pending",
+        )
+        .first()
+    )
+
+    if existing_request:
+        raise HTTPException(
+            status_code=400,
+            detail="You already have a pending exit request",
+        )
+
     new_exit_request = ExitRequest(
-        employee_id=exit_request.employee_id,
+        employee_id=employee.id,
         reason=exit_request.reason,
         proposed_last_working_date=(
             exit_request.proposed_last_working_date
         ),
+        status="pending",
     )
 
-    db.add(new_exit_request)
-    db.commit()
-    db.refresh(new_exit_request)
+    try:
+        db.add(new_exit_request)
+        db.flush()
 
-    create_audit_log(
-        db=db,
-        user_id=None,
-        action="Exit request created",
-        entity_type="ExitRequest",
-        entity_id=new_exit_request.id,
-    )
+        create_audit_log(
+            db=db,
+            user_id=current_user.id,
+            action="Exit request created",
+            entity_type="ExitRequest",
+            entity_id=new_exit_request.id,
+        )
 
-    db.commit()
+        db.commit()
+        db.refresh(new_exit_request)
 
-    return new_exit_request
+        return new_exit_request
+
+    except Exception:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to create exit request",
+        )
+
 
 @app.get(
     "/exit-requests",
     response_model=list[ExitRequestResponse],
 )
 def get_exit_requests(
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    return db.query(ExitRequest).all()
+    query = db.query(ExitRequest)
+
+    if current_user.role not in ["admin", "hr"]:
+        employee = (
+            db.query(Employee)
+            .filter(Employee.user_id == current_user.id)
+            .first()
+        )
+
+        if not employee:
+            raise HTTPException(
+                status_code=404,
+                detail="Employee profile not found",
+            )
+
+        query = query.filter(
+            ExitRequest.employee_id == employee.id
+        )
+
+    return query.order_by(ExitRequest.id.desc()).all()
 
 
-@app.put(
-    "/exit-requests/{exit_request_id}/status"
-)
+@app.put("/exit-requests/{exit_request_id}/status")
 def update_exit_request_status(
     exit_request_id: int,
     status: str,
@@ -713,6 +781,12 @@ def update_exit_request_status(
         raise HTTPException(
             status_code=403,
             detail="Only HR administrators can update exit requests",
+        )
+
+    if status not in ["approved", "rejected"]:
+        raise HTTPException(
+            status_code=400,
+            detail="Status must be approved or rejected",
         )
 
     exit_request = (
@@ -727,52 +801,61 @@ def update_exit_request_status(
             detail="Exit request not found",
         )
 
-    if status not in ["approved", "rejected"]:
+    if exit_request.status != "pending":
         raise HTTPException(
             status_code=400,
-            detail="Status must be approved or rejected",
+            detail="Only pending exit requests can be reviewed",
         )
 
-    exit_request.status = status
+    try:
+        exit_request.status = status
 
-    approval = (
-        db.query(Approval)
-        .filter(
-            Approval.exit_request_id == exit_request.id
-        )
-        .first()
-    )
-
-    if approval:
-        approval.status = status
-        approval.approved_by = current_user.id
-        approval.comments = f"Exit request {status} by HR"
-    else:
-        approval = Approval(
-            exit_request_id=exit_request.id,
-            approved_by=current_user.id,
-            status=status,
-            comments=f"Exit request {status} by HR",
+        approval = (
+            db.query(Approval)
+            .filter(
+                Approval.exit_request_id == exit_request.id
+            )
+            .first()
         )
 
-        db.add(approval)
+        if approval:
+            approval.status = status
+            approval.approved_by = current_user.id
+            approval.comments = f"Exit request {status} by HR"
+            approval.approved_at = datetime.now()
+        else:
+            approval = Approval(
+                exit_request_id=exit_request.id,
+                approved_by=current_user.id,
+                status=status,
+                comments=f"Exit request {status} by HR",
+                approved_at=datetime.now(),
+            )
+            db.add(approval)
 
-    create_audit_log(
-        db=db,
-        user_id=current_user.id,
-        action=f"Exit request {status} by HR",
-        entity_type="ExitRequest",
-        entity_id=exit_request.id,
-    )
+        create_audit_log(
+            db=db,
+            user_id=current_user.id,
+            action=f"Exit request {status} by HR",
+            entity_type="ExitRequest",
+            entity_id=exit_request.id,
+        )
 
-    db.commit()
-    db.refresh(exit_request)
+        db.commit()
+        db.refresh(exit_request)
 
-    return {
-        "message": f"Exit request {status} successfully",
-        "id": exit_request.id,
-        "status": exit_request.status,
-    }
+        return {
+            "message": f"Exit request {status} successfully",
+            "id": exit_request.id,
+            "status": exit_request.status,
+        }
+
+    except Exception:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to update exit request",
+        )
 
 
 @app.post(
