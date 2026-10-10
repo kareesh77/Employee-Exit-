@@ -986,7 +986,6 @@ def update_clearance_status(
         "status": clearance.status,
     }
 
-
 @app.get(
     "/exit-interviews",
     response_model=list[ExitInterviewResponse],
@@ -995,9 +994,13 @@ def get_my_exit_interviews(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    query = db.query(ExitInterview)
+
+    if current_user.role in ["admin", "hr"]:
+        return query.order_by(ExitInterview.id.desc()).all()
+
     return (
-        db.query(ExitInterview)
-        .filter(ExitInterview.user_id == current_user.id)
+        query.filter(ExitInterview.user_id == current_user.id)
         .order_by(ExitInterview.id.desc())
         .all()
     )
@@ -1012,20 +1015,42 @@ def create_exit_interview(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    new_exit_request = (
+    if current_user.role not in ["admin", "hr"]:
+        raise HTTPException(
+            status_code=403,
+            detail="Only HR administrators can create exit interviews",
+        )
+
+    exit_request = (
         db.query(ExitRequest)
-        .join(Employee, Employee.id == ExitRequest.employee_id)
+        .filter(ExitRequest.id == interview.exit_request_id)
+        .first()
+    )
+
+    if not exit_request:
+        raise HTTPException(
+            status_code=404,
+            detail="Exit request not found",
+        )
+
+    if exit_request.status != "approved":
+        raise HTTPException(
+            status_code=400,
+            detail="An exit interview can only be created for an approved exit request",
+        )
+
+    existing_interview = (
+        db.query(ExitInterview)
         .filter(
-            ExitRequest.id == interview.exit_request_id,
-            Employee.user_id == current_user.id,
+            ExitInterview.exit_request_id == interview.exit_request_id
         )
         .first()
     )
 
-    if not new_exit_request:
+    if existing_interview:
         raise HTTPException(
-            status_code=404,
-            detail="Your exit request was not found",
+            status_code=400,
+            detail="An exit interview already exists for this request",
         )
 
     new_interview = ExitInterview(
@@ -1043,7 +1068,7 @@ def create_exit_interview(
         create_audit_log(
             db=db,
             user_id=current_user.id,
-            action="Exit interview created",
+            action="Exit interview created by HR",
             entity_type="ExitInterview",
             entity_id=new_interview.id,
         )
@@ -1059,7 +1084,6 @@ def create_exit_interview(
             status_code=500,
             detail="Unable to create exit interview",
         )
-
 
 @app.post("/hr/employees/{employee_id}/documents")
 def upload_employee_document(
